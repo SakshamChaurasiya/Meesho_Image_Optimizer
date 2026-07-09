@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import ProductImage from "@/models/ProductImage";
-import { uploadToCloudinary } from "@/lib/cloudinary";
+import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary";
 import { handleApiError, AppError } from "@/lib/error-handler";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
@@ -98,5 +98,59 @@ export async function GET() {
     });
   } catch (error) {
     return handleApiError(error, "GET Uploaded Images");
+  }
+}
+
+/**
+ * DELETE /api/upload
+ * Body: { imageId: string }
+ * Deletes the original image + all variant images from Cloudinary,
+ * then removes the document from MongoDB.
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    await connectToDatabase();
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    const schema = z.object({ imageId: z.string().min(1) });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "imageId is required" }, { status: 422 });
+    }
+
+    const { imageId } = parsed.data;
+    const imageDoc = await ProductImage.findById(imageId);
+
+    if (!imageDoc) {
+      return NextResponse.json({ error: "Image not found" }, { status: 404 });
+    }
+
+    // Collect all Cloudinary public_ids to remove (original + variants)
+    const publicIds: string[] = [imageDoc.originalPublicId];
+    for (const variant of imageDoc.variants) {
+      if (variant.publicId) publicIds.push(variant.publicId);
+    }
+
+    logger.info({ imageId, publicIds }, "Deleting image assets from Cloudinary");
+
+    try {
+      await deleteFromCloudinary(publicIds);
+    } catch (cloudinaryErr) {
+      // Log but don't block DB deletion if Cloudinary fails (asset may already be gone)
+      logger.warn({ cloudinaryErr }, "Cloudinary deletion partial failure — continuing with DB removal");
+    }
+
+    await ProductImage.findByIdAndDelete(imageId);
+    logger.info({ imageId }, "Image document deleted from MongoDB");
+
+    return NextResponse.json({ success: true, imageId });
+  } catch (error) {
+    return handleApiError(error, "DELETE Upload Route");
   }
 }

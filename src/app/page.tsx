@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +18,8 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  ExternalLink,
+  Trash2,
 } from "lucide-react";
 
 interface UploadedImage {
@@ -29,8 +32,11 @@ interface UploadedImage {
 }
 
 export default function Home() {
+  const router = useRouter();
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const fetchImages = useCallback(async () => {
     try {
@@ -85,6 +91,39 @@ export default function Home() {
       );
     } finally {
       setProcessingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(imageId);
+        return next;
+      });
+    }
+  };
+
+  const handleDelete = async (imageId: string) => {
+    // First click: show confirmation
+    if (confirmDeleteId !== imageId) {
+      setConfirmDeleteId(imageId);
+      // Auto-cancel confirm after 4s if user doesn't click again
+      setTimeout(() => setConfirmDeleteId((id) => (id === imageId ? null : id)), 4000);
+      return;
+    }
+    // Second click: proceed with deletion
+    setConfirmDeleteId(null);
+    setDeletingIds((prev) => new Set(prev).add(imageId));
+    try {
+      const res = await fetch("/api/upload", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageId }),
+      });
+      if (res.ok) {
+        setImages((prev) => prev.filter((img) => img._id !== imageId));
+      } else {
+        console.error("Delete failed:", await res.text());
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+    } finally {
+      setDeletingIds((prev) => {
         const next = new Set(prev);
         next.delete(imageId);
         return next;
@@ -299,10 +338,17 @@ export default function Home() {
                         </Button>
                       )}
                       {img.status === "completed" && (
-                        <div className="flex items-center justify-center gap-1 text-emerald-500 text-xs font-medium mt-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          Variants Ready
-                        </div>
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="w-full text-xs h-7 mt-1 gap-1.5 bg-emerald-600 hover:bg-emerald-700 border-0"
+                          onClick={() => router.push(`/results/${img._id}`)}
+                          id={`view-results-btn-${img._id}`}
+                        >
+                          <CheckCircle2 className="h-3 w-3" />
+                          View Results
+                          <ExternalLink className="h-3 w-3 ml-auto" />
+                        </Button>
                       )}
                       {img.status === "failed" && (
                         <div className="flex items-center justify-center gap-1 text-red-500 text-xs font-medium mt-1">
@@ -310,6 +356,26 @@ export default function Home() {
                           Processing Failed
                         </div>
                       )}
+
+                      {/* Delete button — always visible, two-step confirm */}
+                      <button
+                        className={`w-full flex items-center justify-center gap-1 text-[10px] font-medium mt-0.5 py-1 rounded-lg border transition-all duration-150 ${
+                          confirmDeleteId === img._id
+                            ? "border-red-500/50 bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                            : "border-border text-muted-foreground hover:border-red-500/30 hover:text-red-400"
+                        } ${deletingIds.has(img._id) ? "opacity-50 pointer-events-none" : ""}`}
+                        onClick={() => handleDelete(img._id)}
+                        id={`delete-btn-${img._id}`}
+                        disabled={deletingIds.has(img._id)}
+                      >
+                        {deletingIds.has(img._id) ? (
+                          <><Loader2 className="h-3 w-3 animate-spin" /> Deleting…</>
+                        ) : confirmDeleteId === img._id ? (
+                          <><Trash2 className="h-3 w-3" /> Confirm Delete</>  
+                        ) : (
+                          <><Trash2 className="h-3 w-3" /> Delete</>
+                        )}
+                      </button>
                     </motion.div>
                   );
                 })}

@@ -54,3 +54,18 @@ export async function uploadToCloudinary(
     uploadStream.end(fileBuffer);
   });
 }
+/**
+ * Deletes one or more resources from Cloudinary by their public_ids.
+ * Uses delete_resources for batch deletion.
+ * @param publicIds Array of Cloudinary public_ids to delete
+ */
+export async function deleteFromCloudinary(publicIds: string[]): Promise<void> {
+  if (publicIds.length === 0) return;
+
+  // Cloudinary delete_resources supports up to 100 ids per call
+  const CHUNK = 100;
+  for (let i = 0; i < publicIds.length; i += CHUNK) {
+    const chunk = publicIds.slice(i, i + CHUNK);
+    await cloudinary.api.delete_resources(chunk, { resource_type: "image" });
+  }
+}
