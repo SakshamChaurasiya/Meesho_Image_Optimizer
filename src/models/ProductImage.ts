@@ -16,6 +16,7 @@ export interface IVariant {
     contrastAdjusted: number;
     compressed: boolean;
   };
+  score: number;
   createdAt: Date;
 }
 
@@ -31,6 +32,29 @@ export interface IProductImage extends Document {
   errorDetails?: string;
   jobId?: string;
   variants: IVariant[];
+  analysis?: {
+    dimensions: {
+      width: number;
+      height: number;
+    };
+    boundingBox: {
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+    };
+    occupancyRatio: number;
+    whiteSpaceRatio: number;
+    centerAlignment: {
+      dx: number;
+      dy: number;
+      isCentered: boolean;
+    };
+    brightness: number;
+    contrast: number;
+    resolution: number;
+    aspectRatio: number;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -51,6 +75,7 @@ const VariantSchema = new Schema<IVariant>({
     contrastAdjusted: { type: Number, default: 1 },
     compressed: { type: Boolean, default: false },
   },
+  score: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -71,6 +96,29 @@ const ProductImageSchema = new Schema<IProductImage>(
     errorDetails: { type: String },
     jobId: { type: String },
     variants: [VariantSchema],
+    analysis: {
+      dimensions: {
+        width: { type: Number },
+        height: { type: Number },
+      },
+      boundingBox: {
+        left: { type: Number },
+        top: { type: Number },
+        width: { type: Number },
+        height: { type: Number },
+      },
+      occupancyRatio: { type: Number },
+      whiteSpaceRatio: { type: Number },
+      centerAlignment: {
+        dx: { type: Number },
+        dy: { type: Number },
+        isCentered: { type: Boolean },
+      },
+      brightness: { type: Number },
+      contrast: { type: Number },
+      resolution: { type: Number },
+      aspectRatio: { type: Number },
+    },
   },
   {
     timestamps: true,

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-07-09
+
+### Added
+- Modular, deterministic image optimization engine (`src/lib/processor.ts`) supporting 24-variant generation.
+- Bounding area, occupancy ratio, white space ratio, alignment center, brightness, contrast, resolution, and aspect ratio image analysis.
+- Graceful API error handling fallback during background removal tasks.
+- Image validation rules pipeline discarding low-resolution or border-touching variants.
+- Visual ranking engine utilizing internal quality optimization score.
+- Responsive variant grid gallery displaying rank and quality score badges.
+- Eye-catching image characteristics analysis dashboard grid on the results page.
+
 ## [0.2.0] - 2026-07-09
 
 ### Added

@@ -19,7 +19,9 @@ export interface VariantConfig {
   backgroundRemoved: boolean;
   paddingPercent: number; // 5 | 10 | 15 | 20
   brightness: number; // 1.0 = default, 1.1 = enhanced
+  contrast: number; // 1.0 = default, 1.1 = enhanced
   outputFormat: OutputFormat;
+  jpegQuality: number;
 }
 
 /** Result of processing a single variant */
@@ -28,6 +30,18 @@ export interface ProcessedVariant {
   config: VariantConfig;
   width: number;
   height: number;
+}
+
+export interface ImageAnalysis {
+  dimensions: { width: number; height: number };
+  boundingBox: { left: number; top: number; width: number; height: number };
+  occupancyRatio: number;
+  whiteSpaceRatio: number;
+  centerAlignment: { dx: number; dy: number; isCentered: boolean };
+  brightness: number;
+  contrast: number;
+  resolution: number;
+  aspectRatio: number;
 }
 
 /**
@@ -95,13 +109,147 @@ function resolveBackground(backgroundType: BackgroundType): { r: number; g: numb
 }
 
 /**
- * Process a single image variant:
- * 1. Remove background (if requested).
- * 2. Trim transparent border to tight bounding box.
- * 3. Scale to fit within padded canvas.
- * 4. Composite centered onto CANVAS_SIZE × CANVAS_SIZE background.
- * 5. Adjust brightness.
- * 6. Convert to specified output format.
+ * Perform detailed visual characteristics analysis on the background-removed or original image.
+ */
+export async function analyzeImage(inputBuffer: Buffer): Promise<ImageAnalysis> {
+  const image = sharp(inputBuffer);
+  const metadata = await image.metadata();
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+
+  // Find bounding box based on alpha channel or fallback
+  const { top, left, width: boxW, height: boxH } = await trimTransparentBorder(inputBuffer);
+
+  const occupancyRatio = (boxW * boxH) / (width * height || 1);
+  const whiteSpaceRatio = 1 - occupancyRatio;
+
+  const imageCenterX = width / 2;
+  const imageCenterY = height / 2;
+  const productCenterX = left + boxW / 2;
+  const productCenterY = top + boxH / 2;
+  const dx = productCenterX - imageCenterX;
+  const dy = productCenterY - imageCenterY;
+  const isCentered = Math.abs(dx) < width * 0.05 && Math.abs(dy) < height * 0.05;
+
+  const stats = await image.stats();
+  const rMean = stats.channels[0]?.mean ?? 128;
+  const gMean = stats.channels[1]?.mean ?? 128;
+  const bMean = stats.channels[2]?.mean ?? 128;
+  const brightness = (rMean + gMean + bMean) / 3;
+
+  const rStdev = stats.channels[0]?.stdev ?? 50;
+  const gStdev = stats.channels[1]?.stdev ?? 50;
+  const bStdev = stats.channels[2]?.stdev ?? 50;
+  const contrast = (rStdev + gStdev + bStdev) / 3;
+
+  return {
+    dimensions: { width, height },
+    boundingBox: { left, top, width: boxW, height: boxH },
+    occupancyRatio,
+    whiteSpaceRatio,
+    centerAlignment: { dx, dy, isCentered },
+    brightness,
+    contrast,
+    resolution: width * height,
+    aspectRatio: width / (height || 1),
+  };
+}
+
+/**
+ * Validate variant based on quality rules.
+ */
+export function validateVariant(
+  processed: ProcessedVariant,
+  analysis: ImageAnalysis,
+  config: VariantConfig
+): { valid: boolean; reason?: string } {
+  // 1. Invalid aspect ratio
+  const ar = processed.width / processed.height;
+  if (ar < 0.95 || ar > 1.05) {
+    return { valid: false, reason: "Invalid aspect ratio" };
+  }
+
+  // 2. Low resolution
+  if (processed.width < 400 || processed.height < 400) {
+    return { valid: false, reason: "Low resolution" };
+  }
+
+  // 3. Failed background cleanup
+  if (
+    config.backgroundRemoved &&
+    analysis.boundingBox.width >= analysis.dimensions.width &&
+    analysis.boundingBox.height >= analysis.dimensions.height
+  ) {
+    return { valid: false, reason: "Failed background cleanup" };
+  }
+
+  // 4. Product touching borders or cropped
+  if (config.paddingPercent <= 0) {
+    return { valid: false, reason: "Product touching borders (zero padding)" };
+  }
+
+  const paddingPx = Math.round((config.paddingPercent / 100) * CANVAS_SIZE);
+  const availableSize = CANVAS_SIZE - paddingPx * 2;
+  const scale = Math.min(availableSize / analysis.boundingBox.width, availableSize / analysis.boundingBox.height);
+  const scaledW = Math.round(analysis.boundingBox.width * scale);
+  const scaledH = Math.round(analysis.boundingBox.height * scale);
+  const offsetLeft = Math.round((CANVAS_SIZE - scaledW) / 2);
+  const offsetTop = Math.round((CANVAS_SIZE - scaledH) / 2);
+
+  if (offsetLeft < paddingPx - 2 || offsetTop < paddingPx - 2) {
+    return { valid: false, reason: "Product cropped or too close to borders" };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Calculate the internal optimization score.
+ */
+export function calculateOptimizationScore(
+  config: VariantConfig,
+  analysis: ImageAnalysis
+): number {
+  let score = 50;
+
+  // 1. Background normalization
+  if (config.backgroundRemoved && config.backgroundType === "white") {
+    score += 20;
+  } else if (config.backgroundRemoved && config.backgroundType === "light-gray") {
+    score += 15;
+  } else if (config.backgroundType === "transparent") {
+    score += 10;
+  }
+
+  // 2. Optimal padding (10% to 15% is sweet spot)
+  if (config.paddingPercent === 10 || config.paddingPercent === 15) {
+    score += 15;
+  } else {
+    score += 5;
+  }
+
+  // 3. Brightness correction
+  if (analysis.brightness < 120 && config.brightness > 1.0) {
+    score += 10;
+  } else if (analysis.brightness >= 120 && config.brightness === 1.0) {
+    score += 5;
+  }
+
+  // 4. Contrast enhancement
+  if (analysis.contrast < 50 && config.contrast > 1.0) {
+    score += 5;
+  }
+
+  // 5. Format preference
+  if (config.outputFormat === "webp") {
+    score += 5;
+  }
+
+  return Math.min(100, Math.max(0, score));
+}
+
+/**
+ * Process a single image variant
  */
 export async function processImageVariant(
   sourceBuffer: Buffer,
@@ -109,40 +257,42 @@ export async function processImageVariant(
 ): Promise<ProcessedVariant> {
   logger.debug(
     { config },
-    `Processing variant: bg=${config.backgroundType} pad=${config.paddingPercent}% brightness=${config.brightness} format=${config.outputFormat}`
+    `Processing variant: bg=${config.backgroundType} pad=${config.paddingPercent}% brightness=${config.brightness}`
   );
 
   let workingBuffer = sourceBuffer;
 
-  // Step 1 — background removal
+  // Step 1 — Background removal (with graceful failure fallback)
   if (config.backgroundRemoved) {
-    const provider = getBackgroundRemovalProvider();
-    workingBuffer = await provider.removeBackground(workingBuffer);
+    try {
+      const provider = getBackgroundRemovalProvider();
+      workingBuffer = await provider.removeBackground(workingBuffer);
+    } catch (err) {
+      logger.error({ err }, "Background removal provider failed. Falling back to original image.");
+      config.backgroundRemoved = false;
+    }
   }
 
-  // Step 2 — trim transparent border to get tight product bounding box
+  // Step 2 — Trim transparent border to get tight bounding box
   const { trimmed, width: subjectW, height: subjectH } = await trimTransparentBorder(workingBuffer);
 
-  // Step 3 — calculate max available canvas area after padding
+  // Step 3 — Scale subject to fit within padded canvas
   const paddingPx = Math.round((config.paddingPercent / 100) * CANVAS_SIZE);
   const availableSize = CANVAS_SIZE - paddingPx * 2;
-
-  // Scale subject to fit in availableSize × availableSize (maintain aspect ratio)
   const scale = Math.min(availableSize / subjectW, availableSize / subjectH);
   const scaledW = Math.round(subjectW * scale);
   const scaledH = Math.round(subjectH * scale);
 
-  // Step 4a — resize the trimmed subject
+  // Step 4 — Resize trimmed subject
   const resizedSubject = await sharp(trimmed)
     .resize(scaledW, scaledH, { fit: "fill" })
     .ensureAlpha()
     .toBuffer();
 
-  // Step 4b — compute exact offset to perfectly center the subject on canvas
   const offsetLeft = Math.round((CANVAS_SIZE - scaledW) / 2);
   const offsetTop = Math.round((CANVAS_SIZE - scaledH) / 2);
 
-  // Step 4c — build the background canvas and composite the subject
+  // Step 5 — Composite onto background canvas
   const background = resolveBackground(config.backgroundType);
   let pipeline = sharp({
     create: {
@@ -156,22 +306,29 @@ export async function processImageVariant(
     },
   }).composite([{ input: resizedSubject, top: offsetTop, left: offsetLeft }]);
 
-  // Step 5 — brightness adjustment using modulate
+  // Step 6 — Brightness adjustment
   if (config.brightness !== 1.0) {
     pipeline = pipeline.modulate({ brightness: config.brightness });
   }
 
-  // Step 5a — flatten to background colour for non-transparent outputs
+  // Step 7 — Contrast adjustment
+  if (config.contrast !== 1.0) {
+    const gain = config.contrast;
+    const bias = -128 * gain + 128;
+    pipeline = pipeline.linear(gain, bias);
+  }
+
+  // Step 8 — Flatten background
   if (config.backgroundType !== "transparent") {
     pipeline = pipeline.flatten({ background });
   }
 
-  // Step 6 — output format conversion
+  // Step 9 — Output format and quality
   let outputBuffer: Buffer;
   if (config.outputFormat === "webp") {
-    outputBuffer = await pipeline.webp({ quality: 85, effort: 4 }).toBuffer();
+    outputBuffer = await pipeline.webp({ quality: config.jpegQuality, effort: 4 }).toBuffer();
   } else {
-    outputBuffer = await pipeline.jpeg({ quality: 88, progressive: true }).toBuffer();
+    outputBuffer = await pipeline.jpeg({ quality: config.jpegQuality, progressive: true }).toBuffer();
   }
 
   return {
@@ -183,77 +340,59 @@ export async function processImageVariant(
 }
 
 /**
- * The full 20-variant processing matrix.
- * Combinations: 4 bg/padding × 4 padding × 2 brightness × 2 format = 20 distinct configs.
- *
- * 5 bg configs × 2 brightness × 2 format = 20
+ * Build deterministic 24-variant config matrix.
  */
 function buildVariantMatrix(): VariantConfig[] {
   const configs: VariantConfig[] = [];
+  const paddings = [5, 10, 15, 20];
+  const formats: OutputFormat[] = ["webp", "jpeg"];
 
-  // Background-removed variants (white bg) × padding 5/10/15/20 × default brightness × webp
-  const bgRemovedPaddings: number[] = [5, 10, 15, 20];
-  for (const pad of bgRemovedPaddings) {
-    configs.push({
-      backgroundRemoved: true,
-      backgroundType: "white",
-      paddingPercent: pad,
-      brightness: 1.0,
-      outputFormat: "webp",
-    });
-    // Enhanced brightness variant
-    configs.push({
-      backgroundRemoved: true,
-      backgroundType: "white",
-      paddingPercent: pad,
-      brightness: 1.1,
-      outputFormat: "jpeg",
-    });
+  for (const bgRemoved of [true, false]) {
+    for (const bgType of ["white", "light-gray", "transparent"] as BackgroundType[]) {
+      if (bgType === "transparent" && !bgRemoved) continue;
+
+      for (const pad of paddings) {
+        for (const format of formats) {
+          const brightness = pad === 10 || pad === 20 ? 1.1 : 1.0;
+          const contrast = pad === 15 || pad === 20 ? 1.1 : 1.0;
+          const jpegQuality = format === "jpeg" ? (pad === 5 ? 80 : pad === 15 ? 90 : 85) : 85;
+
+          configs.push({
+            backgroundRemoved: bgRemoved,
+            backgroundType: bgType,
+            paddingPercent: pad,
+            brightness,
+            contrast,
+            outputFormat: format,
+            jpegQuality,
+          });
+        }
+      }
+    }
   }
 
-  // Light-gray background (background removed) × padding 10% × 2 formats
-  configs.push({
-    backgroundRemoved: true,
-    backgroundType: "light-gray",
-    paddingPercent: 10,
-    brightness: 1.0,
-    outputFormat: "webp",
-  });
-  configs.push({
-    backgroundRemoved: true,
-    backgroundType: "light-gray",
-    paddingPercent: 10,
-    brightness: 1.1,
-    outputFormat: "jpeg",
-  });
-
-  // Original (no bg removal) — centered + padded × 2 paddings × 2 formats
-  configs.push({
-    backgroundRemoved: false,
-    backgroundType: "white",
-    paddingPercent: 5,
-    brightness: 1.0,
-    outputFormat: "webp",
-  });
-  configs.push({
-    backgroundRemoved: false,
-    backgroundType: "white",
-    paddingPercent: 10,
-    brightness: 1.0,
-    outputFormat: "jpeg",
-  });
-
-  return configs;
+  return configs.slice(0, 24);
 }
 
 /**
- * Run all variants for the given image buffer, uploading each to Cloudinary.
- * Returns an array of IVariant objects ready for MongoDB persistence.
+ * Generate, validate, and rank all variants.
  */
 export async function generateAllVariants(
   sourceBuffer: Buffer,
   imageId: string
-): Promise<IVariant[]> {
+): Promise<{ variants: IVariant[]; analysis: ImageAnalysis }> {
+  // 1. Initial background-removed buffer for analysis
+  let bgRemovedBuffer: Buffer | null = null;
+  try {
+    const provider = getBackgroundRemovalProvider();
+    bgRemovedBuffer = await provider.removeBackground(sourceBuffer);
+  } catch (err) {
+    logger.error({ err }, "Initial background removal for analysis failed. Using source image.");
+  }
+
+  const analysisBuffer = bgRemovedBuffer || sourceBuffer;
+  const analysis = await analyzeImage(analysisBuffer);
+
   const matrix = buildVariantMatrix();
   logger.info({ imageId, total: matrix.length }, "Starting variant generation");
 
@@ -264,9 +403,17 @@ export async function generateAllVariants(
     const variantId = `variant_${i + 1}_${config.backgroundType}_pad${config.paddingPercent}_${config.outputFormat}`;
 
     try {
-      logger.debug({ variantId, config }, "Processing variant");
-
       const processed = await processImageVariant(sourceBuffer, config);
+
+      // Validate variant quality rules
+      const validation = validateVariant(processed, analysis, config);
+      if (!validation.valid) {
+        logger.warn({ variantId, reason: validation.reason }, "Variant failed validation — skipping");
+        continue;
+      }
+
+      // Calculate score
+      const score = calculateOptimizationScore(config, analysis);
 
       const uploaded = await uploadToCloudinary(
         processed.buffer,
@@ -286,19 +433,22 @@ export async function generateAllVariants(
           objectCentered: true,
           paddingApplied: config.paddingPercent,
           brightnessAdjusted: config.brightness,
-          contrastAdjusted: 1.0,
+          contrastAdjusted: config.contrast,
           compressed: true,
         },
+        score,
         createdAt: new Date(),
       });
 
-      logger.info({ variantId, url: uploaded.secure_url }, `Variant ${i + 1}/${matrix.length} uploaded`);
+      logger.info({ variantId, score, url: uploaded.secure_url }, `Variant ${i + 1}/${matrix.length} added`);
     } catch (err) {
       logger.error({ variantId, err }, `Failed to process variant ${variantId} — skipping`);
-      // Continue generating remaining variants even if one fails
     }
   }
 
-  logger.info({ imageId, generated: variants.length, total: matrix.length }, "Variant generation complete");
-  return variants;
+  // Rank variants by score descending
+  variants.sort((a, b) => b.score - a.score);
+
+  logger.info({ imageId, generated: variants.length }, "Variant generation and scoring complete");
+  return { variants, analysis };
 }

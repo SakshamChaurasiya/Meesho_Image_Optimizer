@@ -15,3 +15,12 @@
 4. **Robust Logging and Centralized Error Handling**
    - Pino is utilized to output clean logs.
    - The centralized error handler `handleApiError` wraps API routes, normalizing validation (Zod) and application errors (`AppError`) into structured JSON responses.
+
+5. **Deterministic Processing & Validation Engine**
+   - Images are processed using `sharp` to apply deterministic modifications (scale, padding, centering, brightness, contrast, compression).
+   - A validation pipeline filters out variants failing predefined quality thresholds (e.g. edge-touching, incorrect aspect ratios, or cropped content).
+   - Handled background removal errors gracefully, failing back to the original backdrop where needed.
+
+6. **Internal Scoring System**
+   - Ranks processed images using a multi-factor scoring algorithm (0-100) based on optimal margins, white space normalization, formatting, and brightness levels.
+   - It is explicitly defined as a quality-consistency rating rather than a shipping cost predictor.

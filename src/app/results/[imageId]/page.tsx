@@ -30,6 +30,17 @@ interface ImageResult {
   size: number;
   status: string;
   variants: Omit<VariantCardProps, "index">[];
+  analysis?: {
+    dimensions: { width: number; height: number };
+    boundingBox: { left: number; top: number; width: number; height: number };
+    occupancyRatio: number;
+    whiteSpaceRatio: number;
+    centerAlignment: { dx: number; dy: number; isCentered: boolean };
+    brightness: number;
+    contrast: number;
+    resolution: number;
+    aspectRatio: number;
+  };
   createdAt: string;
 }
 
@@ -223,6 +234,55 @@ export default function ResultsPage() {
                       </button>
                     ))}
                   </div>
+                </div>
+              </div>
+            </motion.section>
+          )}
+
+          {/* Image Analysis Dashboard */}
+          {data.analysis && (
+            <motion.section
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="space-y-4"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary animate-pulse" />
+                <h2 className="text-lg font-bold">Image Characteristics Analysis</h2>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
+                <div className="border border-border bg-card/40 p-3 rounded-xl flex flex-col justify-between hover:border-primary/30 transition-all duration-300">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold">Dimensions</span>
+                  <span className="text-sm font-semibold mt-1">{data.analysis.dimensions.width}×{data.analysis.dimensions.height}</span>
+                </div>
+                <div className="border border-border bg-card/40 p-3 rounded-xl flex flex-col justify-between hover:border-primary/30 transition-all duration-300">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold">Occupancy Ratio</span>
+                  <span className="text-sm font-semibold mt-1">{Math.round(data.analysis.occupancyRatio * 100)}%</span>
+                </div>
+                <div className="border border-border bg-card/40 p-3 rounded-xl flex flex-col justify-between hover:border-primary/30 transition-all duration-300">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold">White Space</span>
+                  <span className="text-sm font-semibold mt-1">{Math.round(data.analysis.whiteSpaceRatio * 100)}%</span>
+                </div>
+                <div className="border border-border bg-card/40 p-3 rounded-xl flex flex-col justify-between hover:border-primary/30 transition-all duration-300">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold">Centered</span>
+                  <span className="text-sm font-semibold mt-1">{data.analysis.centerAlignment.isCentered ? "Yes" : "No"}</span>
+                </div>
+                <div className="border border-border bg-card/40 p-3 rounded-xl flex flex-col justify-between hover:border-primary/30 transition-all duration-300">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold">Brightness</span>
+                  <span className="text-sm font-semibold mt-1">{Math.round(data.analysis.brightness)}/255</span>
+                </div>
+                <div className="border border-border bg-card/40 p-3 rounded-xl flex flex-col justify-between hover:border-primary/30 transition-all duration-300">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold">Contrast</span>
+                  <span className="text-sm font-semibold mt-1">{Math.round(data.analysis.contrast)}/128</span>
+                </div>
+                <div className="border border-border bg-card/40 p-3 rounded-xl flex flex-col justify-between hover:border-primary/30 transition-all duration-300">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold">Resolution</span>
+                  <span className="text-sm font-semibold mt-1">{(data.analysis.resolution / 1000000).toFixed(2)} MP</span>
+                </div>
+                <div className="border border-border bg-card/40 p-3 rounded-xl flex flex-col justify-between hover:border-primary/30 transition-all duration-300">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold">Aspect Ratio</span>
+                  <span className="text-sm font-semibold mt-1">{data.analysis.aspectRatio.toFixed(2)}:1</span>
                 </div>
               </div>
             </motion.section>

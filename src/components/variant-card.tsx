@@ -22,6 +22,7 @@ export interface VariantCardProps {
   width: number;
   height: number;
   transformations: VariantTransformations;
+  score: number;
   index: number;
 }
 
@@ -50,6 +51,7 @@ export function VariantCard({
   width,
   height,
   transformations,
+  score,
   index,
 }: VariantCardProps) {
   const badges: { label: string; color: string }[] = [];
@@ -98,6 +100,9 @@ export function VariantCard({
         <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm">
           <CheckCircle2 className="h-3 w-3 text-emerald-400" />
           #{index + 1}
+        </div>
+        <div className="absolute top-2 right-2 flex items-center gap-1 bg-primary/90 text-primary-foreground text-[10px] font-extrabold px-2 py-0.5 rounded-full backdrop-blur-sm shadow-sm">
+          Score: {score}
         </div>
       </div>
 

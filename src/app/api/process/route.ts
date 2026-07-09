@@ -82,9 +82,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Run the full variant generation pipeline
-    let variants;
+    let results;
     try {
-      variants = await generateAllVariants(sourceBuffer, imageId);
+      results = await generateAllVariants(sourceBuffer, imageId);
     } catch (procErr) {
       logger.error({ imageId, procErr }, "Variant generation failed");
       imageDoc.status = "failed";
@@ -94,27 +94,29 @@ export async function POST(req: NextRequest) {
     }
 
     // Persist all variants and mark as completed
-    imageDoc.variants = variants;
-    imageDoc.status = variants.length > 0 ? "completed" : "failed";
-    if (variants.length === 0) {
+    imageDoc.variants = results.variants;
+    imageDoc.analysis = results.analysis;
+    imageDoc.status = results.variants.length > 0 ? "completed" : "failed";
+    if (results.variants.length === 0) {
       imageDoc.errorDetails = "All variant processing attempts failed";
     }
     await imageDoc.save();
 
-    logger.info({ imageId, variantCount: variants.length }, "Processing completed successfully");
+    logger.info({ imageId, variantCount: results.variants.length }, "Processing completed successfully");
 
     return NextResponse.json(
       {
         success: true,
         imageId,
         status: imageDoc.status,
-        variantCount: variants.length,
-        variants: variants.map((v) => ({
+        variantCount: results.variants.length,
+        variants: results.variants.map((v) => ({
           variantId: v.variantId,
           url: v.url,
           format: v.format,
           size: v.size,
           transformations: v.transformations,
+          score: v.score,
         })),
       },
       { status: 200 }
