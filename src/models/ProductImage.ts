@@ -32,6 +32,8 @@ export interface IProductImage extends Document {
   errorDetails?: string;
   jobId?: string;
   variants: IVariant[];
+  backgroundProvider?: string;
+  fallbackUsed?: boolean;
   analysis?: {
     dimensions: {
       width: number;
@@ -96,6 +98,8 @@ const ProductImageSchema = new Schema<IProductImage>(
     errorDetails: { type: String },
     jobId: { type: String },
     variants: [VariantSchema],
+    backgroundProvider: { type: String },
+    fallbackUsed: { type: Boolean, default: false },
     analysis: {
       dimensions: {
         width: { type: Number },

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-07-10
+
+### Added
+- `@imgly/background-removal-node` as a local fallback provider for background removal tasks.
+- Fallback provider chain architecture with configurable environment settings (`BACKGROUND_PROVIDER`, `BACKGROUND_FALLBACK`).
+- Metadata persistence (`backgroundProvider` and `fallbackUsed` fields) in MongoDB.
+- Caching and buffer reuse for background removed results to eliminate redundant calls and keep memory usage low.
+
 ## [0.3.0] - 2026-07-09
 
 ### Added

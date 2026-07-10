@@ -15,9 +15,12 @@ MeeshoOptimizer/
 │   │   ├── theme-provider.tsx
 │   │   └── theme-toggle.tsx
 │   ├── lib/
+│   │   ├── ai/
+│   │   │   └── providers.ts # Background removal provider and fallback implementation
 │   │   ├── db.ts            # Mongoose connection pooling helper
 │   │   ├── error-handler.ts # Centralized route handler error wrapper
 │   │   ├── logger.ts        # Pino logger instance
+│   │   ├── processor.ts     # Image processing variant generation engine
 │   │   └── utils.ts         # Utility helpers (cn class merger)
 │   └── models/
 │       └── ProductImage.ts  # Mongoose model for product images

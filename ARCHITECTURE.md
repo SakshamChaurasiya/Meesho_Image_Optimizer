@@ -8,9 +8,10 @@
 2. **MongoDB Connection Caching**
    - Implemented connection caching in `src/lib/db.ts` to prevent Mongoose connection pooling issues in serverless database routes during hot reloads and concurrent requests.
 
-3. **No-Claim AI Processing Abstraction**
-   - The system is built around deterministic computer vision resizing, centering, padding, and brightness adjustments combined with third-party background removal services.
-   - All AI service provider endpoints will be designed through an abstraction layer to permit seamless swap-outs.
+3. **No-Claim AI Processing Abstraction & Fallback**
+   - The system is built around deterministic computer vision resizing, centering, padding, and brightness adjustments combined with background removal services.
+   - All AI service provider endpoints are designed through an abstraction layer to permit seamless swap-outs, supporting configured primary (`RemoveBgProvider`) and local fallback (`ImglyProvider` via `@imgly/background-removal-node`) providers.
+   - Buffer reuse is optimized so background removal runs only once per job, and the results are cached.
 
 4. **Robust Logging and Centralized Error Handling**
    - Pino is utilized to output clean logs.

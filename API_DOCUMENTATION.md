@@ -82,6 +82,8 @@ Or for errors:
     "success": true,
     "imageId": "64b123...",
     "status": "completed",
+    "backgroundProvider": "removebg",
+    "fallbackUsed": false,
     "variantCount": 24,
     "variants": [
       {
@@ -129,6 +131,8 @@ Or for errors:
       "fileName": "tshirt.png",
       "originalUrl": "https://res.cloudinary.com/...",
       "status": "completed",
+      "backgroundProvider": "removebg",
+      "fallbackUsed": false,
       "analysis": {
         "dimensions": { "width": 800, "height": 800 },
         "boundingBox": { "left": 100, "top": 50, "width": 600, "height": 700 },

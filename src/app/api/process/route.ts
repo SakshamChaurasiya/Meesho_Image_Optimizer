@@ -96,6 +96,12 @@ export async function POST(req: NextRequest) {
     // Persist all variants and mark as completed
     imageDoc.variants = results.variants;
     imageDoc.analysis = results.analysis;
+    if (results.backgroundProvider) {
+      imageDoc.backgroundProvider = results.backgroundProvider;
+    }
+    if (results.fallbackUsed !== undefined) {
+      imageDoc.fallbackUsed = results.fallbackUsed;
+    }
     imageDoc.status = results.variants.length > 0 ? "completed" : "failed";
     if (results.variants.length === 0) {
       imageDoc.errorDetails = "All variant processing attempts failed";

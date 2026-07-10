@@ -91,6 +91,7 @@ export default function ResultsPage() {
       .finally(() => setLoading(false));
   }, [imageId]);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleOptimize = async (transformations: any, variantId: string) => {
     if (!imageId) return;
     setRefining(true);
@@ -126,6 +127,7 @@ export default function ResultsPage() {
         if (refreshJson.success) {
           setData(refreshJson.data);
           const bgRemoved = refreshJson.data.variants.find(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (v: any) => v.transformations.backgroundRemoved
           );
           setComparisonVariant(bgRemoved ?? refreshJson.data.variants[0] ?? null);
@@ -135,7 +137,7 @@ export default function ResultsPage() {
       } else {
         setError(json.error ?? "Refinement failed");
       }
-    } catch (err) {
+    } catch {
       setError("Network error during refinement");
     } finally {
       setRefining(false);

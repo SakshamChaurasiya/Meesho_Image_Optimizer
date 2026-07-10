@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
         paddingPercent: baseTransformations.paddingPercent,
         brightness: baseTransformations.brightness,
         contrast: baseTransformations.contrast,
-        outputFormat: "jpeg", // Force JPEG per requirements
+        outputFormat: "jpg", // Force JPG per requirements
         jpegQuality: 85,
       });
     } catch (procErr) {
@@ -94,6 +94,12 @@ export async function POST(req: NextRequest) {
     // Overwrite the existing variants with the new refined list and complete
     imageDoc.variants = results.variants;
     imageDoc.analysis = results.analysis;
+    if (results.backgroundProvider) {
+      imageDoc.backgroundProvider = results.backgroundProvider;
+    }
+    if (results.fallbackUsed !== undefined) {
+      imageDoc.fallbackUsed = results.fallbackUsed;
+    }
     imageDoc.status = results.variants.length > 0 ? "completed" : "failed";
     if (results.variants.length === 0) {
       imageDoc.errorDetails = "All refined variant processing attempts failed";

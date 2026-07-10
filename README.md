@@ -7,7 +7,7 @@ The application intelligently applies computer vision techniques (e.g., padding,
 ## Tech Stack
 
 - **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui, Framer Motion
-- **Backend**: Next.js Route Handlers
+- **Backend**: Next.js Route Handlers, @imgly/background-removal-node (local fallback background removal)
 - **Database**: MongoDB (Mongoose ODM)
 - **Logging**: Pino
 - **Validation**: Zod

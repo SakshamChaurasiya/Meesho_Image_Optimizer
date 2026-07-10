@@ -19,7 +19,7 @@ Below are the key features defined in our roadmap:
 - Dynamic responsive uploaded image gallery showing status.
 
 ## Phase 4 - Image Optimization Engine (Completed)
-- Background removal using the provider abstraction (graceful Remove.bg integration).
+- Background removal using the provider abstraction (primary Remove.bg API integration and local `@imgly/background-removal-node` fallback mechanism).
 - In-depth image characteristics analysis: dimensions, bounding area, occupancy ratio, white space ratio, center alignment, brightness, contrast, resolution, aspect ratio.
 - Deterministic 24-variant generation matrix adjusting scale, padding, alignment offsets, quality, brightness, and contrast.
 - Variant quality validation rules rejecting cropped or low-quality options.

@@ -8,7 +8,7 @@ import type { IVariant } from "@/models/ProductImage";
 const CANVAS_SIZE = 800;
 
 /** Output format and quality settings */
-type OutputFormat = "webp" | "jpeg";
+type OutputFormat = "webp" | "jpg";
 
 /** Background type for processed variants */
 type BackgroundType = "white" | "light-gray" | "transparent";
@@ -253,7 +253,8 @@ export function calculateOptimizationScore(
  */
 export async function processImageVariant(
   sourceBuffer: Buffer,
-  config: VariantConfig
+  config: VariantConfig,
+  precomputedBgRemoved?: Buffer
 ): Promise<ProcessedVariant> {
   logger.debug(
     { config },
@@ -264,12 +265,17 @@ export async function processImageVariant(
 
   // Step 1 — Background removal (with graceful failure fallback)
   if (config.backgroundRemoved) {
-    try {
-      const provider = getBackgroundRemovalProvider();
-      workingBuffer = await provider.removeBackground(workingBuffer);
-    } catch (err) {
-      logger.error({ err }, "Background removal provider failed. Falling back to original image.");
-      config.backgroundRemoved = false;
+    if (precomputedBgRemoved) {
+      workingBuffer = precomputedBgRemoved;
+    } else {
+      try {
+        const provider = getBackgroundRemovalProvider();
+        const res = await provider.remove(workingBuffer);
+        workingBuffer = res.buffer;
+      } catch (err) {
+        logger.error({ err }, "Background removal provider failed. Falling back to original image.");
+        config.backgroundRemoved = false;
+      }
     }
   }
 
@@ -344,8 +350,8 @@ export async function processImageVariant(
  */
 function buildVariantMatrix(): VariantConfig[] {
   const configs: VariantConfig[] = [];
-  const paddings = [5, 10, 15, 20];
-  const formats: OutputFormat[] = ["jpeg"];
+  const paddings = [15, 20, 25, 30];
+  const formats: OutputFormat[] = ["jpg"];
 
   for (const bgRemoved of [true, false]) {
     for (const bgType of ["white", "light-gray", "transparent"] as BackgroundType[]) {
@@ -353,9 +359,9 @@ function buildVariantMatrix(): VariantConfig[] {
 
       for (const pad of paddings) {
         for (const format of formats) {
-          const brightness = pad === 10 || pad === 20 ? 1.1 : 1.0;
-          const contrast = pad === 15 || pad === 20 ? 1.1 : 1.0;
-          const jpegQuality = format === "jpeg" ? (pad === 5 ? 80 : pad === 15 ? 90 : 85) : 85;
+          const brightness = pad === 20 || pad === 30 ? 1.1 : 1.0;
+          const contrast = pad === 25 || pad === 30 ? 1.1 : 1.0;
+          const jpegQuality = format === "jpg" ? (pad === 15 ? 80 : pad === 25 ? 90 : 85) : 85;
 
           configs.push({
             backgroundRemoved: bgRemoved,
@@ -380,12 +386,23 @@ function buildVariantMatrix(): VariantConfig[] {
 export async function generateAllVariants(
   sourceBuffer: Buffer,
   imageId: string
-): Promise<{ variants: IVariant[]; analysis: ImageAnalysis }> {
+): Promise<{
+  variants: IVariant[];
+  analysis: ImageAnalysis;
+  backgroundProvider?: string;
+  fallbackUsed?: boolean;
+}> {
   // 1. Initial background-removed buffer for analysis
   let bgRemovedBuffer: Buffer | null = null;
+  let backgroundProvider: string | undefined;
+  let fallbackUsed: boolean | undefined;
+
   try {
     const provider = getBackgroundRemovalProvider();
-    bgRemovedBuffer = await provider.removeBackground(sourceBuffer);
+    const res = await provider.remove(sourceBuffer);
+    bgRemovedBuffer = res.buffer;
+    backgroundProvider = res.backgroundProvider;
+    fallbackUsed = res.fallbackUsed;
   } catch (err) {
     logger.error({ err }, "Initial background removal for analysis failed. Using source image.");
   }
@@ -403,7 +420,7 @@ export async function generateAllVariants(
     const variantId = `variant_${i + 1}_${config.backgroundType}_pad${config.paddingPercent}_${config.outputFormat}`;
 
     try {
-      const processed = await processImageVariant(sourceBuffer, config);
+      const processed = await processImageVariant(sourceBuffer, config, bgRemovedBuffer || undefined);
 
       // Validate variant quality rules
       const validation = validateVariant(processed, analysis, config);
@@ -450,7 +467,7 @@ export async function generateAllVariants(
   variants.sort((a, b) => b.score - a.score);
 
   logger.info({ imageId, generated: variants.length }, "Variant generation and scoring complete");
-  return { variants, analysis };
+  return { variants, analysis, backgroundProvider, fallbackUsed };
 }
 
 /**
@@ -463,10 +480,10 @@ function buildRefinedMatrix(base: VariantConfig): VariantConfig[] {
   // 1. Always keep the base config as the reference
   configs.push(base);
 
-  // 2. Padding variations (offset by -3, -1, +1, +3, capped between 2% and 30%)
+  // 2. Padding variations (offset by -3, -1, +1, +3, capped between 2% and 45%)
   const paddingOffsets = [-3, -1, 1, 3];
   for (const offset of paddingOffsets) {
-    const newPad = Math.max(2, Math.min(30, base.paddingPercent + offset));
+    const newPad = Math.max(2, Math.min(45, base.paddingPercent + offset));
     if (newPad !== base.paddingPercent && !configs.some(c => c.paddingPercent === newPad && c.brightness === base.brightness && c.contrast === base.contrast)) {
       configs.push({
         ...base,
@@ -528,12 +545,23 @@ export async function generateRefinedVariants(
   sourceBuffer: Buffer,
   imageId: string,
   baseConfig: VariantConfig
-): Promise<{ variants: IVariant[]; analysis: ImageAnalysis }> {
+): Promise<{
+  variants: IVariant[];
+  analysis: ImageAnalysis;
+  backgroundProvider?: string;
+  fallbackUsed?: boolean;
+}> {
   // 1. Initial background-removed buffer for analysis
   let bgRemovedBuffer: Buffer | null = null;
+  let backgroundProvider: string | undefined;
+  let fallbackUsed: boolean | undefined;
+
   try {
     const provider = getBackgroundRemovalProvider();
-    bgRemovedBuffer = await provider.removeBackground(sourceBuffer);
+    const res = await provider.remove(sourceBuffer);
+    bgRemovedBuffer = res.buffer;
+    backgroundProvider = res.backgroundProvider;
+    fallbackUsed = res.fallbackUsed;
   } catch (err) {
     logger.error({ err }, "Initial background removal for analysis failed. Using source image.");
   }
@@ -551,7 +579,7 @@ export async function generateRefinedVariants(
     const variantId = `variant_ref_${i + 1}_${config.backgroundType}_pad${config.paddingPercent}_${config.outputFormat}`;
 
     try {
-      const processed = await processImageVariant(sourceBuffer, config);
+      const processed = await processImageVariant(sourceBuffer, config, bgRemovedBuffer || undefined);
 
       // Validate variant quality rules
       const validation = validateVariant(processed, analysis, config);
@@ -598,5 +626,5 @@ export async function generateRefinedVariants(
   variants.sort((a, b) => b.score - a.score);
 
   logger.info({ imageId, generated: variants.length }, "Refined variant generation and scoring complete");
-  return { variants, analysis };
+  return { variants, analysis, backgroundProvider, fallbackUsed };
 }
