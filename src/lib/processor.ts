@@ -5,7 +5,7 @@ import { uploadToCloudinary } from "@/lib/cloudinary";
 import type { IVariant } from "@/models/ProductImage";
 
 /** Canvas dimensions for all output images (Meesho-recommended square) */
-const CANVAS_SIZE = 2048;
+const CANVAS_SIZE = 800;
 
 /** Output format and quality settings */
 type OutputFormat = "webp" | "jpeg";
@@ -17,7 +17,7 @@ type BackgroundType = "white" | "light-gray" | "transparent";
 export interface VariantConfig {
   backgroundType: BackgroundType;
   backgroundRemoved: boolean;
-  paddingPercent: number; // 9 | 10 | 11
+  paddingPercent: number; // 5 | 10 | 15 | 20
   brightness: number; // 1.0 = default, 1.1 = enhanced
   contrast: number; // 1.0 = default, 1.1 = enhanced
   outputFormat: OutputFormat;
@@ -170,8 +170,8 @@ export function validateVariant(
   }
 
   // 2. Low resolution
-  if (processed.width < 2000 || processed.height < 2000) {
-    return { valid: false, reason: "Low resolution (must be at least 2000x2000 px)" };
+  if (processed.width < 400 || processed.height < 400) {
+    return { valid: false, reason: "Low resolution" };
   }
 
   // 3. Failed background cleanup
@@ -323,35 +323,12 @@ export async function processImageVariant(
     pipeline = pipeline.flatten({ background });
   }
 
-  // Step 9 — Output format and quality with adaptive file-size tuning (150 KB - 300 KB)
+  // Step 9 — Output format and quality
   let outputBuffer: Buffer;
   if (config.outputFormat === "webp") {
     outputBuffer = await pipeline.webp({ quality: config.jpegQuality, effort: 4 }).toBuffer();
   } else {
-    let currentQuality = 85;
-    outputBuffer = await pipeline.jpeg({ quality: currentQuality, progressive: true }).toBuffer();
-
-    const MIN_SIZE_BYTES = 150 * 1024;
-    const MAX_SIZE_BYTES = 300 * 1024;
-
-    logger.debug(`Initial JPEG size at quality=${currentQuality}: ${outputBuffer.length} bytes`);
-
-    if (outputBuffer.length > MAX_SIZE_BYTES) {
-      // Too large: decrease quality step-by-step
-      while (outputBuffer.length > MAX_SIZE_BYTES && currentQuality > 10) {
-        currentQuality -= 5;
-        outputBuffer = await pipeline.jpeg({ quality: currentQuality, progressive: true }).toBuffer();
-      }
-    } else if (outputBuffer.length < MIN_SIZE_BYTES) {
-      // Too small: increase quality step-by-step
-      while (outputBuffer.length < MIN_SIZE_BYTES && currentQuality < 100) {
-        currentQuality += 2;
-        outputBuffer = await pipeline.jpeg({ quality: Math.min(100, currentQuality), progressive: true }).toBuffer();
-      }
-    }
-    
-    logger.debug(`Final JPEG size at quality=${currentQuality}: ${outputBuffer.length} bytes`);
-    config.jpegQuality = currentQuality;
+    outputBuffer = await pipeline.jpeg({ quality: config.jpegQuality, progressive: true }).toBuffer();
   }
 
   return {
@@ -367,20 +344,27 @@ export async function processImageVariant(
  */
 function buildVariantMatrix(): VariantConfig[] {
   const configs: VariantConfig[] = [];
-  const paddings = [9, 10, 11]; // 18%, 20%, 22% total scale reduction
+  const paddings = [5, 10, 15, 20];
+  const formats: OutputFormat[] = ["jpeg"];
 
   for (const bgRemoved of [true, false]) {
-    for (const pad of paddings) {
-      for (const brightness of [1.0, 1.1]) {
-        for (const contrast of [1.0, 1.1]) {
+    for (const bgType of ["white", "light-gray", "transparent"] as BackgroundType[]) {
+      if (bgType === "transparent" && !bgRemoved) continue;
+
+      for (const pad of paddings) {
+        for (const format of formats) {
+          const brightness = pad === 10 || pad === 20 ? 1.1 : 1.0;
+          const contrast = pad === 15 || pad === 20 ? 1.1 : 1.0;
+          const jpegQuality = format === "jpeg" ? (pad === 5 ? 80 : pad === 15 ? 90 : 85) : 85;
+
           configs.push({
             backgroundRemoved: bgRemoved,
-            backgroundType: "white",
+            backgroundType: bgType,
             paddingPercent: pad,
             brightness,
             contrast,
-            outputFormat: "jpeg",
-            jpegQuality: 85, // start quality, will be adaptively optimized
+            outputFormat: format,
+            jpegQuality,
           });
         }
       }
