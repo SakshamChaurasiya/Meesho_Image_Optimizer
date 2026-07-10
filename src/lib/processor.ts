@@ -5,7 +5,7 @@ import { uploadToCloudinary } from "@/lib/cloudinary";
 import type { IVariant } from "@/models/ProductImage";
 
 /** Canvas dimensions for all output images (Meesho-recommended square) */
-const CANVAS_SIZE = 800;
+const CANVAS_SIZE = 2048;
 
 /** Output format and quality settings */
 type OutputFormat = "webp" | "jpeg";
@@ -17,7 +17,7 @@ type BackgroundType = "white" | "light-gray" | "transparent";
 export interface VariantConfig {
   backgroundType: BackgroundType;
   backgroundRemoved: boolean;
-  paddingPercent: number; // 5 | 10 | 15 | 20
+  paddingPercent: number; // 9 | 10 | 11
   brightness: number; // 1.0 = default, 1.1 = enhanced
   contrast: number; // 1.0 = default, 1.1 = enhanced
   outputFormat: OutputFormat;
@@ -170,8 +170,8 @@ export function validateVariant(
   }
 
   // 2. Low resolution
-  if (processed.width < 400 || processed.height < 400) {
-    return { valid: false, reason: "Low resolution" };
+  if (processed.width < 2000 || processed.height < 2000) {
+    return { valid: false, reason: "Low resolution (must be at least 2000x2000 px)" };
   }
 
   // 3. Failed background cleanup
@@ -323,12 +323,35 @@ export async function processImageVariant(
     pipeline = pipeline.flatten({ background });
   }
 
-  // Step 9 — Output format and quality
+  // Step 9 — Output format and quality with adaptive file-size tuning (150 KB - 300 KB)
   let outputBuffer: Buffer;
   if (config.outputFormat === "webp") {
     outputBuffer = await pipeline.webp({ quality: config.jpegQuality, effort: 4 }).toBuffer();
   } else {
-    outputBuffer = await pipeline.jpeg({ quality: config.jpegQuality, progressive: true }).toBuffer();
+    let currentQuality = 85;
+    outputBuffer = await pipeline.jpeg({ quality: currentQuality, progressive: true }).toBuffer();
+
+    const MIN_SIZE_BYTES = 150 * 1024;
+    const MAX_SIZE_BYTES = 300 * 1024;
+
+    logger.debug(`Initial JPEG size at quality=${currentQuality}: ${outputBuffer.length} bytes`);
+
+    if (outputBuffer.length > MAX_SIZE_BYTES) {
+      // Too large: decrease quality step-by-step
+      while (outputBuffer.length > MAX_SIZE_BYTES && currentQuality > 10) {
+        currentQuality -= 5;
+        outputBuffer = await pipeline.jpeg({ quality: currentQuality, progressive: true }).toBuffer();
+      }
+    } else if (outputBuffer.length < MIN_SIZE_BYTES) {
+      // Too small: increase quality step-by-step
+      while (outputBuffer.length < MIN_SIZE_BYTES && currentQuality < 100) {
+        currentQuality += 2;
+        outputBuffer = await pipeline.jpeg({ quality: Math.min(100, currentQuality), progressive: true }).toBuffer();
+      }
+    }
+    
+    logger.debug(`Final JPEG size at quality=${currentQuality}: ${outputBuffer.length} bytes`);
+    config.jpegQuality = currentQuality;
   }
 
   return {
@@ -344,27 +367,20 @@ export async function processImageVariant(
  */
 function buildVariantMatrix(): VariantConfig[] {
   const configs: VariantConfig[] = [];
-  const paddings = [5, 10, 15, 20];
-  const formats: OutputFormat[] = ["webp", "jpeg"];
+  const paddings = [9, 10, 11]; // 18%, 20%, 22% total scale reduction
 
   for (const bgRemoved of [true, false]) {
-    for (const bgType of ["white", "light-gray", "transparent"] as BackgroundType[]) {
-      if (bgType === "transparent" && !bgRemoved) continue;
-
-      for (const pad of paddings) {
-        for (const format of formats) {
-          const brightness = pad === 10 || pad === 20 ? 1.1 : 1.0;
-          const contrast = pad === 15 || pad === 20 ? 1.1 : 1.0;
-          const jpegQuality = format === "jpeg" ? (pad === 5 ? 80 : pad === 15 ? 90 : 85) : 85;
-
+    for (const pad of paddings) {
+      for (const brightness of [1.0, 1.1]) {
+        for (const contrast of [1.0, 1.1]) {
           configs.push({
             backgroundRemoved: bgRemoved,
-            backgroundType: bgType,
+            backgroundType: "white",
             paddingPercent: pad,
             brightness,
             contrast,
-            outputFormat: format,
-            jpegQuality,
+            outputFormat: "jpeg",
+            jpegQuality: 85, // start quality, will be adaptively optimized
           });
         }
       }
@@ -450,5 +466,153 @@ export async function generateAllVariants(
   variants.sort((a, b) => b.score - a.score);
 
   logger.info({ imageId, generated: variants.length }, "Variant generation and scoring complete");
+  return { variants, analysis };
+}
+
+/**
+ * Build a refined matrix around a chosen base variant config.
+ * Applies minor variations to padding, brightness, and contrast to guarantee uniqueness.
+ */
+function buildRefinedMatrix(base: VariantConfig): VariantConfig[] {
+  const configs: VariantConfig[] = [];
+  
+  // 1. Always keep the base config as the reference
+  configs.push(base);
+
+  // 2. Padding variations (offset by -3, -1, +1, +3, capped between 2% and 30%)
+  const paddingOffsets = [-3, -1, 1, 3];
+  for (const offset of paddingOffsets) {
+    const newPad = Math.max(2, Math.min(30, base.paddingPercent + offset));
+    if (newPad !== base.paddingPercent && !configs.some(c => c.paddingPercent === newPad && c.brightness === base.brightness && c.contrast === base.contrast)) {
+      configs.push({
+        ...base,
+        paddingPercent: newPad,
+      });
+    }
+  }
+
+  // 3. Brightness variations (offset by -0.05, -0.02, +0.02, +0.05, capped between 0.8 and 1.3)
+  const brightnessOffsets = [-0.05, -0.02, 0.02, 0.05];
+  for (const offset of brightnessOffsets) {
+    const newBright = Math.max(0.8, Math.min(1.3, Number((base.brightness + offset).toFixed(2))));
+    if (newBright !== base.brightness && !configs.some(c => c.paddingPercent === base.paddingPercent && c.brightness === newBright && c.contrast === base.contrast)) {
+      configs.push({
+        ...base,
+        brightness: newBright,
+      });
+    }
+  }
+
+  // 4. Contrast variations (offset by -0.05, -0.02, +0.02, +0.05, capped between 0.8 and 1.3)
+  const contrastOffsets = [-0.05, -0.02, 0.02, 0.05];
+  for (const offset of contrastOffsets) {
+    const newContrast = Math.max(0.8, Math.min(1.3, Number((base.contrast + offset).toFixed(2))));
+    if (newContrast !== base.contrast && !configs.some(c => c.paddingPercent === base.paddingPercent && c.brightness === base.brightness && c.contrast === newContrast)) {
+      configs.push({
+        ...base,
+        contrast: newContrast,
+      });
+    }
+  }
+
+  // 5. Joint adjustments
+  const jointConfigs = [
+    { brightness: 0.03, contrast: 0.03 },
+    { brightness: -0.03, contrast: -0.03 },
+    { brightness: 0.03, contrast: -0.03 },
+    { brightness: -0.03, contrast: 0.03 },
+  ];
+  for (const joint of jointConfigs) {
+    const newBright = Math.max(0.8, Math.min(1.3, Number((base.brightness + joint.brightness).toFixed(2))));
+    const newContrast = Math.max(0.8, Math.min(1.3, Number((base.contrast + joint.contrast).toFixed(2))));
+    if (!configs.some(c => c.paddingPercent === base.paddingPercent && c.brightness === newBright && c.contrast === newContrast)) {
+      configs.push({
+        ...base,
+        brightness: newBright,
+        contrast: newContrast,
+      });
+    }
+  }
+
+  return configs.slice(0, 12);
+}
+
+/**
+ * Generate, validate, and rank refined variants around a user preference.
+ */
+export async function generateRefinedVariants(
+  sourceBuffer: Buffer,
+  imageId: string,
+  baseConfig: VariantConfig
+): Promise<{ variants: IVariant[]; analysis: ImageAnalysis }> {
+  // 1. Initial background-removed buffer for analysis
+  let bgRemovedBuffer: Buffer | null = null;
+  try {
+    const provider = getBackgroundRemovalProvider();
+    bgRemovedBuffer = await provider.removeBackground(sourceBuffer);
+  } catch (err) {
+    logger.error({ err }, "Initial background removal for analysis failed. Using source image.");
+  }
+
+  const analysisBuffer = bgRemovedBuffer || sourceBuffer;
+  const analysis = await analyzeImage(analysisBuffer);
+
+  const matrix = buildRefinedMatrix(baseConfig);
+  logger.info({ imageId, baseConfig, total: matrix.length }, "Starting refined variant generation");
+
+  const variants: IVariant[] = [];
+
+  for (let i = 0; i < matrix.length; i++) {
+    const config = matrix[i];
+    const variantId = `variant_ref_${i + 1}_${config.backgroundType}_pad${config.paddingPercent}_${config.outputFormat}`;
+
+    try {
+      const processed = await processImageVariant(sourceBuffer, config);
+
+      // Validate variant quality rules
+      const validation = validateVariant(processed, analysis, config);
+      if (!validation.valid) {
+        logger.warn({ variantId, reason: validation.reason }, "Refined variant failed validation — skipping");
+        continue;
+      }
+
+      // Calculate score
+      const score = calculateOptimizationScore(config, analysis);
+
+      const uploaded = await uploadToCloudinary(
+        processed.buffer,
+        `packoptima/variants/${imageId}`
+      );
+
+      variants.push({
+        variantId,
+        url: uploaded.secure_url,
+        publicId: uploaded.public_id,
+        width: processed.width,
+        height: processed.height,
+        size: uploaded.bytes,
+        format: config.outputFormat,
+        transformations: {
+          backgroundRemoved: config.backgroundRemoved,
+          objectCentered: true,
+          paddingApplied: config.paddingPercent,
+          brightnessAdjusted: config.brightness,
+          contrastAdjusted: config.contrast,
+          compressed: true,
+        },
+        score,
+        createdAt: new Date(),
+      });
+
+      logger.info({ variantId, score, url: uploaded.secure_url }, `Refined variant ${i + 1}/${matrix.length} added`);
+    } catch (err) {
+      logger.error({ variantId, err }, `Failed to process refined variant ${variantId} — skipping`);
+    }
+  }
+
+  // Rank variants by score descending
+  variants.sort((a, b) => b.score - a.score);
+
+  logger.info({ imageId, generated: variants.length }, "Refined variant generation and scoring complete");
   return { variants, analysis };
 }

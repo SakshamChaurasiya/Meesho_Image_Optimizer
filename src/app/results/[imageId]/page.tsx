@@ -44,14 +44,12 @@ interface ImageResult {
   createdAt: string;
 }
 
-type FilterKey = "all" | "bg-removed" | "original-bg" | "webp" | "jpeg";
+type FilterKey = "all" | "bg-removed" | "original-bg";
 
 const FILTER_OPTIONS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All Variants" },
   { key: "bg-removed", label: "BG Removed" },
   { key: "original-bg", label: "Original BG" },
-  { key: "webp", label: "WebP Only" },
-  { key: "jpeg", label: "JPEG Only" },
 ];
 
 function formatBytes(bytes: number): string {
@@ -68,6 +66,7 @@ export default function ResultsPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [comparisonVariant, setComparisonVariant] = useState<Omit<VariantCardProps, "index"> | null>(null);
+  const [refining, setRefining] = useState(false);
   const { download: downloadZip, state: zipState, progress: zipProgress } = useDownloadZip(
     data ? `packoptima_${data.fileName.replace(/\.[^.]+$/, "")}_variants.zip` : "packoptima_variants.zip"
   );
@@ -92,16 +91,63 @@ export default function ResultsPage() {
       .finally(() => setLoading(false));
   }, [imageId]);
 
+  const handleOptimize = async (transformations: any, variantId: string) => {
+    if (!imageId) return;
+    setRefining(true);
+    setError(null);
+    try {
+      let backgroundType: "white" | "light-gray" | "transparent" = "white";
+      if (variantId.includes("_transparent_")) {
+        backgroundType = "transparent";
+      } else if (variantId.includes("_light-gray_")) {
+        backgroundType = "light-gray";
+      }
+
+      const res = await fetch("/api/process/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageId,
+          baseTransformations: {
+            backgroundRemoved: transformations.backgroundRemoved,
+            backgroundType,
+            paddingPercent: transformations.paddingApplied,
+            brightness: transformations.brightnessAdjusted,
+            contrast: transformations.contrastAdjusted,
+          }
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        // Refetch the data
+        const refreshRes = await fetch(`/api/results/${imageId}`);
+        const refreshJson = await refreshRes.json();
+        if (refreshJson.success) {
+          setData(refreshJson.data);
+          const bgRemoved = refreshJson.data.variants.find(
+            (v: any) => v.transformations.backgroundRemoved
+          );
+          setComparisonVariant(bgRemoved ?? refreshJson.data.variants[0] ?? null);
+        } else {
+          setError(refreshJson.error ?? "Failed to reload refined variants");
+        }
+      } else {
+        setError(json.error ?? "Refinement failed");
+      }
+    } catch (err) {
+      setError("Network error during refinement");
+    } finally {
+      setRefining(false);
+    }
+  };
+
   const filteredVariants = data?.variants.filter((v) => {
     switch (activeFilter) {
       case "bg-removed":
         return v.transformations.backgroundRemoved;
       case "original-bg":
         return !v.transformations.backgroundRemoved;
-      case "webp":
-        return v.format === "webp";
-      case "jpeg":
-        return v.format === "jpeg";
       default:
         return true;
     }
@@ -141,18 +187,20 @@ export default function ResultsPage() {
         </div>
       </header>
 
-      {/* Loading */}
-      {loading && (
+      {/* Loading / Refining */}
+      {(loading || refining) && (
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-10 w-10 text-primary animate-spin" />
-            <p className="text-muted-foreground text-sm">Loading variants…</p>
+            <p className="text-muted-foreground text-sm font-medium">
+              {refining ? "Refining variants based on your choice..." : "Loading variants…"}
+            </p>
           </div>
         </div>
       )}
 
       {/* Error */}
-      {!loading && error && (
+      {!loading && !refining && error && (
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="flex flex-col items-center gap-4 text-center max-w-md px-4">
             <AlertCircle className="h-12 w-12 text-red-500" />
@@ -167,7 +215,7 @@ export default function ResultsPage() {
       )}
 
       {/* Results */}
-      {!loading && data && (
+      {!loading && !refining && data && (
         <main className="container mx-auto px-4 sm:px-6 py-10 space-y-12">
           {/* Page title */}
           <motion.div
@@ -321,14 +369,46 @@ export default function ResultsPage() {
                   variant="outline"
                   className="relative gap-2 text-xs h-8 overflow-hidden min-w-[130px] border-border hover:border-primary/40 disabled:opacity-70"
                   disabled={zipState === "fetching" || zipState === "zipping"}
-                  onClick={() =>
-                    downloadZip(
-                      filteredVariants.map((v) => ({
-                        url: v.url,
-                        fileName: `${v.variantId}.${v.format}`,
-                      }))
-                    )
-                  }
+                  onClick={() => {
+                    const imageEntries = filteredVariants.map((v, index) => ({
+                      url: v.url,
+                      fileName: `${String(index + 1).padStart(2, '0')}_${v.variantId}.${v.format}`,
+                    }));
+
+                    const metadataText = [
+                      "PACKOPTIMA VARIANTS CONSTRAINTS & METADATA",
+                      `Generated At: ${new Date().toLocaleString()}`,
+                      `Total Images: ${filteredVariants.length}`,
+                      "==================================================",
+                      "",
+                      ...filteredVariants.map((v, index) => {
+                        const num = String(index + 1).padStart(2, '0');
+                        const bgType = v.transformations.backgroundRemoved
+                          ? (v.variantId.includes("transparent") ? "Transparent" : v.variantId.includes("light-gray") ? "Light Gray" : "White")
+                          : "Original Background";
+
+                        return `[Image #${num}]
+File: ${num}_${v.variantId}.jpeg
+Background Removal: ${v.transformations.backgroundRemoved ? "Yes" : "No"}
+Background Color: ${bgType}
+Padding: ${v.transformations.paddingApplied}%
+Brightness: ${v.transformations.brightnessAdjusted > 1.0 ? `+${Math.round((v.transformations.brightnessAdjusted - 1) * 100)}%` : "Normal"}
+Contrast: ${v.transformations.contrastAdjusted > 1.0 ? `+${Math.round((v.transformations.contrastAdjusted - 1) * 100)}%` : "Normal"}
+Quality Score: ${v.score}/100
+Dimensions: ${v.width}x${v.height}
+Size: ${formatBytes(v.size)}
+----------------------------------------`;
+                      })
+                    ].join("\n");
+
+                    downloadZip([
+                      ...imageEntries,
+                      {
+                        fileName: "metadata.txt",
+                        content: metadataText,
+                      }
+                    ]);
+                  }}
                   id="download-all-btn"
                 >
                   {/* Progress fill background */}
@@ -380,7 +460,7 @@ export default function ResultsPage() {
                   className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
                 >
                   {filteredVariants.map((variant, i) => (
-                    <VariantCard key={variant.variantId} {...variant} index={i} />
+                    <VariantCard key={variant.variantId} {...variant} index={i} onOptimize={handleOptimize} />
                   ))}
                 </motion.div>
               )}

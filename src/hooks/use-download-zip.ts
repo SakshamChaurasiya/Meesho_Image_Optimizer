@@ -2,8 +2,9 @@ import JSZip from "jszip";
 import { useState, useCallback } from "react";
 
 export interface ZipEntry {
-  url: string;
-  fileName: string; // e.g. "variant_1_white_pad5_webp.webp"
+  url?: string;
+  content?: string;
+  fileName: string; // e.g. "variant_1_white_pad5_webp.webp" or "metadata.txt"
 }
 
 export type ZipState = "idle" | "fetching" | "zipping" | "done" | "error";
@@ -28,9 +29,61 @@ export function useDownloadZip(zipFileName = "packoptima_variants.zip") {
       try {
         const zip = new JSZip();
 
+        // Helper function to convert a WebP Blob to a JPEG Blob client-side
+        const convertWebPToJPEG = (webpBlob: Blob): Promise<Blob> => {
+          return new Promise((resolve, reject) => {
+            const img = new Image();
+            const url = URL.createObjectURL(webpBlob);
+
+            img.onload = () => {
+              URL.revokeObjectURL(url);
+              const canvas = document.createElement("canvas");
+              canvas.width = img.naturalWidth;
+              canvas.height = img.naturalHeight;
+              const ctx = canvas.getContext("2d");
+              if (!ctx) {
+                reject(new Error("Failed to get 2D canvas context"));
+                return;
+              }
+
+              // Fill with white background (JPEG doesn't support transparency)
+              ctx.fillStyle = "#ffffff";
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 0, 0);
+
+              canvas.toBlob(
+                (jpegBlob) => {
+                  if (jpegBlob) {
+                    resolve(jpegBlob);
+                  } else {
+                    reject(new Error("Failed to convert canvas to JPEG blob"));
+                  }
+                },
+                "image/jpeg",
+                0.92 // high quality
+              );
+            };
+
+            img.onerror = () => {
+              URL.revokeObjectURL(url);
+              reject(new Error("Failed to load WebP image for JPEG conversion"));
+            };
+
+            img.src = url;
+          });
+        };
+
         // Fetch each image and add to zip, updating progress per file
         for (let i = 0; i < entries.length; i++) {
-          const { url, fileName } = entries[i];
+          const { url, content, fileName } = entries[i];
+
+          if (content !== undefined) {
+            zip.file(fileName, content);
+            setProgress(Math.round(((i + 1) / entries.length) * 80));
+            continue;
+          }
+
+          if (!url) continue;
 
           const response = await fetch(url);
           if (!response.ok) {
@@ -38,7 +91,20 @@ export function useDownloadZip(zipFileName = "packoptima_variants.zip") {
           }
 
           const blob = await response.blob();
-          zip.file(fileName, blob);
+          let finalBlob = blob;
+          let finalFileName = fileName;
+
+          // Convert webp to jpeg if needed
+          if (blob.type === "image/webp" || fileName.toLowerCase().endsWith(".webp")) {
+            try {
+              finalBlob = await convertWebPToJPEG(blob);
+              finalFileName = fileName.replace(/\.webp$/i, ".jpeg");
+            } catch (err) {
+              console.error("Failed to convert WebP to JPEG, using original blob:", err);
+            }
+          }
+
+          zip.file(finalFileName, finalBlob);
 
           setProgress(Math.round(((i + 1) / entries.length) * 80)); // 0–80% = fetching phase
         }
