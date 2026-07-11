@@ -24,7 +24,6 @@ export interface VariantCardProps {
   transformations: VariantTransformations;
   score: number;
   index: number;
-  onOptimize?: (transformations: VariantTransformations, variantId: string) => void;
 }
 
 function formatBytes(bytes: number): string {
@@ -54,7 +53,6 @@ export function VariantCard({
   transformations,
   score,
   index,
-  onOptimize,
 }: VariantCardProps) {
   const badges: { label: string; color: string }[] = [];
 
@@ -136,24 +134,13 @@ export function VariantCard({
           <Button
             size="sm"
             variant="outline"
-            className="flex-1 text-[11px] h-7 gap-1 px-1.5 border-border hover:border-primary/40 hover:bg-primary/5"
+            className="w-full text-[11px] h-7 gap-1 px-1.5 border-border hover:border-primary/40 hover:bg-primary/5"
             onClick={() => downloadVariant(url, `${variantId}.${format}`)}
             id={`download-${variantId}`}
           >
             <Download className="h-3 w-3" />
             Download
           </Button>
-          {onOptimize && (
-            <Button
-              size="sm"
-              variant="default"
-              className="flex-1 text-[11px] h-7 gap-1 px-1.5 bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
-              onClick={() => onOptimize(transformations, variantId)}
-              id={`optimize-${variantId}`}
-            >
-              🎯 Optimize
-            </Button>
-          )}
         </div>
       </div>
     </motion.div>

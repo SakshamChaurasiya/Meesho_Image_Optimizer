@@ -66,7 +66,6 @@ export default function ResultsPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [comparisonVariant, setComparisonVariant] = useState<Omit<VariantCardProps, "index"> | null>(null);
-  const [refining, setRefining] = useState(false);
   const { download: downloadZip, state: zipState, progress: zipProgress } = useDownloadZip(
     data ? `packoptima_${data.fileName.replace(/\.[^.]+$/, "")}_variants.zip` : "packoptima_variants.zip"
   );
@@ -90,59 +89,6 @@ export default function ResultsPage() {
       .catch(() => setError("Network error — could not load results"))
       .finally(() => setLoading(false));
   }, [imageId]);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleOptimize = async (transformations: any, variantId: string) => {
-    if (!imageId) return;
-    setRefining(true);
-    setError(null);
-    try {
-      let backgroundType: "white" | "light-gray" | "transparent" = "white";
-      if (variantId.includes("_transparent_")) {
-        backgroundType = "transparent";
-      } else if (variantId.includes("_light-gray_")) {
-        backgroundType = "light-gray";
-      }
-
-      const res = await fetch("/api/process/refine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageId,
-          baseTransformations: {
-            backgroundRemoved: transformations.backgroundRemoved,
-            backgroundType,
-            paddingPercent: transformations.paddingApplied,
-            brightness: transformations.brightnessAdjusted,
-            contrast: transformations.contrastAdjusted,
-          }
-        }),
-      });
-
-      const json = await res.json();
-      if (json.success) {
-        // Refetch the data
-        const refreshRes = await fetch(`/api/results/${imageId}`);
-        const refreshJson = await refreshRes.json();
-        if (refreshJson.success) {
-          setData(refreshJson.data);
-          const bgRemoved = refreshJson.data.variants.find(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (v: any) => v.transformations.backgroundRemoved
-          );
-          setComparisonVariant(bgRemoved ?? refreshJson.data.variants[0] ?? null);
-        } else {
-          setError(refreshJson.error ?? "Failed to reload refined variants");
-        }
-      } else {
-        setError(json.error ?? "Refinement failed");
-      }
-    } catch {
-      setError("Network error during refinement");
-    } finally {
-      setRefining(false);
-    }
-  };
 
   const filteredVariants = data?.variants.filter((v) => {
     switch (activeFilter) {
@@ -189,20 +135,20 @@ export default function ResultsPage() {
         </div>
       </header>
 
-      {/* Loading / Refining */}
-      {(loading || refining) && (
+      {/* Loading */}
+      {loading && (
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-10 w-10 text-primary animate-spin" />
             <p className="text-muted-foreground text-sm font-medium">
-              {refining ? "Refining variants based on your choice..." : "Loading variants…"}
+              Loading variants…
             </p>
           </div>
         </div>
       )}
 
       {/* Error */}
-      {!loading && !refining && error && (
+      {!loading && error && (
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="flex flex-col items-center gap-4 text-center max-w-md px-4">
             <AlertCircle className="h-12 w-12 text-red-500" />
@@ -217,7 +163,7 @@ export default function ResultsPage() {
       )}
 
       {/* Results */}
-      {!loading && !refining && data && (
+      {!loading && data && (
         <main className="container mx-auto px-4 sm:px-6 py-10 space-y-12">
           {/* Page title */}
           <motion.div
@@ -462,7 +408,7 @@ Size: ${formatBytes(v.size)}
                   className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
                 >
                   {filteredVariants.map((variant, i) => (
-                    <VariantCard key={variant.variantId} {...variant} index={i} onOptimize={handleOptimize} />
+                    <VariantCard key={variant.variantId} {...variant} index={i} />
                   ))}
                 </motion.div>
               )}
