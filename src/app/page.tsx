@@ -33,6 +33,7 @@ interface UploadedImage {
 export default function Home() {
   const router = useRouter();
   const [images, setImages] = useState<UploadedImage[]>([]);
+  const [loading, setLoading] = useState(true);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -46,6 +47,8 @@ export default function Home() {
       }
     } catch (error) {
       console.error("Failed to fetch images:", error);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -272,116 +275,135 @@ export default function Home() {
 
       {/* Recent Uploaded Images Grid */}
       <AnimatePresence>
-        {images.length > 0 && (
+        {(loading || images.length > 0) && (
           <section className="container mx-auto px-4 sm:px-6 py-12 border-t border-slate-200 dark:border-slate-850 bg-white/40 dark:bg-slate-900/10 backdrop-blur-sm max-w-7xl">
             <div className="max-w-5xl mx-auto">
               <h2 className="text-lg font-bold mb-6 text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <ImageIcon className="h-5 w-5 text-slate-650 dark:text-slate-400" />
                 Your Optimized Catalog Images
               </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {images.map((img) => {
-                  const isProcessing = processingIds.has(img._id);
-                  const statusColor =
-                    img.status === "completed"
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                      : img.status === "failed"
-                      ? "bg-red-500/10 text-red-650 dark:text-red-400 border-red-500/20"
-                      : img.status === "processing"
-                      ? "bg-blue-500/10 text-blue-650 dark:text-blue-400 border-blue-500/20"
-                      : "bg-amber-500/10 text-amber-650 dark:text-amber-400 border-amber-500/20";
+              {loading ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-in fade-in duration-300">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="border border-slate-200 dark:border-slate-805 bg-white dark:bg-slate-900/40 rounded-xl p-3.5 flex flex-col gap-3.5 animate-pulse">
+                      <div className="aspect-square rounded-lg bg-slate-100 dark:bg-slate-950/80" />
+                      <div className="space-y-2">
+                        <div className="h-3 bg-slate-100 dark:bg-slate-950/80 rounded w-2/3" />
+                        <div className="flex justify-between items-center">
+                          <div className="h-2.5 bg-slate-100 dark:bg-slate-950/80 rounded w-1/4" />
+                          <div className="h-4 bg-slate-100 dark:bg-slate-950/80 rounded w-1/3" />
+                        </div>
+                      </div>
+                      <div className="h-8 bg-slate-100 dark:bg-slate-950/85 rounded-lg mt-1 w-full" />
+                      <div className="h-6 bg-slate-100 dark:bg-slate-950/85 rounded-lg w-full" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {images.map((img) => {
+                    const isProcessing = processingIds.has(img._id);
+                    const statusColor =
+                      img.status === "completed"
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                        : img.status === "failed"
+                        ? "bg-red-500/10 text-red-650 dark:text-red-400 border-red-500/20"
+                        : img.status === "processing"
+                        ? "bg-blue-500/10 text-blue-650 dark:text-blue-400 border-blue-500/20"
+                        : "bg-amber-500/10 text-amber-650 dark:text-amber-400 border-amber-500/20";
 
-                  return (
-                    <motion.div
-                      key={img._id}
-                      layout
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      className="relative group border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 rounded-xl overflow-hidden flex flex-col p-3 gap-2"
-                    >
-                      {/* Image thumbnail */}
-                      <div className="relative aspect-square rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-850">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={img.originalUrl}
-                          alt={img.fileName}
-                          className="w-full h-full object-contain"
-                        />
-                        {isProcessing && (
-                          <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/80 flex items-center justify-center">
-                            <Loader2 className="h-5 w-5 text-slate-900 dark:text-slate-100 animate-spin" />
+                    return (
+                      <motion.div
+                        key={img._id}
+                        layout
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="relative group border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 rounded-xl overflow-hidden flex flex-col p-3 gap-2"
+                      >
+                        {/* Image thumbnail */}
+                        <div className="relative aspect-square rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-850">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={img.originalUrl}
+                            alt={img.fileName}
+                            className="w-full h-full object-contain"
+                          />
+                          {isProcessing && (
+                            <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/80 flex items-center justify-center">
+                              <Loader2 className="h-5 w-5 text-slate-900 dark:text-slate-100 animate-spin" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Info row */}
+                        <div className="text-left">
+                          <p className="text-xs font-bold truncate text-slate-850 dark:text-slate-205">{img.fileName}</p>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase">{img.format}</span>
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${statusColor}`}>
+                              {img.status === "completed" && img.variantCount
+                                ? `${img.variantCount} variants`
+                                : img.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Action row */}
+                        {img.status === "pending" && !isProcessing && (
+                          <Button
+                            size="sm"
+                            className="w-full text-xs h-8 mt-1 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-200 font-semibold"
+                            onClick={() => handleProcess(img._id)}
+                            id={`process-btn-${img._id}`}
+                          >
+                            <Zap className="h-3 w-3 mr-1.5" />
+                            Generate Variants
+                          </Button>
+                        )}
+                        {img.status === "completed" && (
+                          <Button
+                            size="sm"
+                            className="w-full text-xs h-8 mt-1 gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold border-0"
+                            onClick={() => router.push(`/results/${img._id}`)}
+                            id={`view-results-btn-${img._id}`}
+                          >
+                            <CheckCircle2 className="h-3 w-3" />
+                            Compare & Select
+                            <ArrowRight className="h-3 w-3 ml-auto" />
+                          </Button>
+                        )}
+                        {img.status === "failed" && (
+                          <div className="flex items-center justify-center gap-1 text-red-500 text-xs font-bold mt-1.5 py-1">
+                            <XCircle className="h-3.5 w-3.5" />
+                            Failed
                           </div>
                         )}
-                      </div>
 
-                      {/* Info row */}
-                      <div className="text-left">
-                        <p className="text-xs font-bold truncate text-slate-850 dark:text-slate-205">{img.fileName}</p>
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase">{img.format}</span>
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${statusColor}`}>
-                            {img.status === "completed" && img.variantCount
-                              ? `${img.variantCount} variants`
-                              : img.status}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Action row */}
-                      {img.status === "pending" && !isProcessing && (
-                        <Button
-                          size="sm"
-                          className="w-full text-xs h-8 mt-1 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-200 font-semibold"
-                          onClick={() => handleProcess(img._id)}
-                          id={`process-btn-${img._id}`}
+                        {/* Delete button */}
+                        <button
+                          className={`w-full flex items-center justify-center gap-1 text-[9px] font-bold mt-0.5 py-1.5 rounded-lg border transition-all duration-150 ${
+                            confirmDeleteId === img._id
+                              ? "border-red-200 bg-red-50 dark:bg-red-950/20 text-red-650 hover:bg-red-100 dark:hover:bg-red-950/40"
+                              : "border-slate-100 dark:border-slate-800/80 text-slate-400 dark:text-slate-500 hover:border-red-100 hover:text-red-500"
+                          } ${deletingIds.has(img._id) ? "opacity-50 pointer-events-none" : ""}`}
+                          onClick={() => handleDelete(img._id)}
+                          id={`delete-btn-${img._id}`}
+                          disabled={deletingIds.has(img._id)}
                         >
-                          <Zap className="h-3 w-3 mr-1.5" />
-                          Generate Variants
-                        </Button>
-                      )}
-                      {img.status === "completed" && (
-                        <Button
-                          size="sm"
-                          className="w-full text-xs h-8 mt-1 gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold border-0"
-                          onClick={() => router.push(`/results/${img._id}`)}
-                          id={`view-results-btn-${img._id}`}
-                        >
-                          <CheckCircle2 className="h-3 w-3" />
-                          Compare & Select
-                          <ArrowRight className="h-3 w-3 ml-auto" />
-                        </Button>
-                      )}
-                      {img.status === "failed" && (
-                        <div className="flex items-center justify-center gap-1 text-red-500 text-xs font-bold mt-1.5 py-1">
-                          <XCircle className="h-3.5 w-3.5" />
-                          Failed
-                        </div>
-                      )}
-
-                      {/* Delete button */}
-                      <button
-                        className={`w-full flex items-center justify-center gap-1 text-[9px] font-bold mt-0.5 py-1.5 rounded-lg border transition-all duration-150 ${
-                          confirmDeleteId === img._id
-                            ? "border-red-200 bg-red-50 dark:bg-red-950/20 text-red-650 hover:bg-red-100 dark:hover:bg-red-950/40"
-                            : "border-slate-100 dark:border-slate-800/80 text-slate-400 dark:text-slate-500 hover:border-red-100 hover:text-red-500"
-                        } ${deletingIds.has(img._id) ? "opacity-50 pointer-events-none" : ""}`}
-                        onClick={() => handleDelete(img._id)}
-                        id={`delete-btn-${img._id}`}
-                        disabled={deletingIds.has(img._id)}
-                      >
-                        {deletingIds.has(img._id) ? (
-                          <><Loader2 className="h-3 w-3 animate-spin" /> Deleting…</>
-                        ) : confirmDeleteId === img._id ? (
-                          <><Trash2 className="h-3 w-3" /> Confirm Delete</>  
-                        ) : (
-                          <><Trash2 className="h-3 w-3" /> Remove Image</>
-                        )}
-                      </button>
-                    </motion.div>
-                  );
-                })}
-              </div>
+                          {deletingIds.has(img._id) ? (
+                            <><Loader2 className="h-3 w-3 animate-spin" /> Deleting…</>
+                          ) : confirmDeleteId === img._id ? (
+                            <><Trash2 className="h-3 w-3" /> Confirm Delete</>  
+                          ) : (
+                            <><Trash2 className="h-3 w-3" /> Remove Image</>
+                          )}
+                        </button>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </section>
         )}
