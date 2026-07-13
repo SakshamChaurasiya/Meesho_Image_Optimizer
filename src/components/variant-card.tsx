@@ -87,29 +87,29 @@ export function VariantCard({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.03, type: "spring", stiffness: 120 }}
-      className="group relative flex flex-col border border-border bg-card/50 backdrop-blur-sm rounded-xl overflow-hidden hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
+      className="group relative flex flex-col border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 rounded-xl overflow-hidden hover:border-slate-400 dark:hover:border-slate-650 hover:shadow-lg hover:shadow-slate-100/50 dark:hover:shadow-none transition-all duration-300"
     >
       {/* Thumbnail */}
-      <div className="relative bg-[repeating-conic-gradient(#80808015_0%_25%,transparent_0%_50%)] bg-[length:16px_16px] aspect-square overflow-hidden">
+      <div className="relative bg-[repeating-conic-gradient(#80808010_0%_25%,transparent_0%_50%)] bg-[length:16px_16px] dark:bg-[repeating-conic-gradient(#ffffff04_0%_25%,transparent_0%_50%)] aspect-square overflow-hidden border-b border-slate-100 dark:border-slate-800">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={url}
           alt={variantId}
-          className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
+          className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-[1.03]"
         />
-        <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm">
+        <div className="absolute top-2 left-2 flex items-center gap-1 bg-slate-900/90 dark:bg-slate-950/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm shadow-sm">
           <CheckCircle2 className="h-3 w-3 text-emerald-400" />
           #{index + 1}
         </div>
-        <div className="absolute top-2 right-2 flex items-center gap-1 bg-primary/90 text-black text-[10px] font-extrabold px-2 py-0.5 rounded-full backdrop-blur-sm shadow-sm">
+        <div className="absolute top-2 right-2 flex items-center gap-1 bg-emerald-500/90 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full backdrop-blur-sm shadow-sm">
           Score: {score}
         </div>
       </div>
 
       {/* Info */}
-      <div className="p-3 flex flex-col gap-2 flex-1">
+      <div className="p-3.5 flex flex-col gap-3.5 flex-1">
         {/* Dimension + size */}
-        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+        <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 dark:text-slate-400">
           <span className="flex items-center gap-1">
             <ImageIcon className="h-3 w-3" />
             {width}×{height}
@@ -122,7 +122,13 @@ export function VariantCard({
           {badges.map((b) => (
             <span
               key={b.label}
-              className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full border ${b.color}`}
+              className={`text-[9px] font-semibold px-2 py-0.5 rounded-md border ${
+                b.color.includes("zinc")
+                  ? "bg-slate-100 dark:bg-slate-850 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800"
+                  : b.color.includes("violet")
+                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/25"
+                  : b.color
+              }`}
             >
               {b.label}
             </span>
@@ -130,11 +136,11 @@ export function VariantCard({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-2 mt-auto">
+        <div className="flex gap-2 mt-auto pt-1">
           <Button
             size="sm"
             variant="outline"
-            className="w-full text-[11px] h-7 gap-1 px-1.5 border-border hover:border-primary/40 hover:bg-primary/5"
+            className="w-full text-xs h-8 gap-1.5 px-2 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold"
             onClick={() => downloadVariant(url, `${variantId}.${format}`)}
             id={`download-${variantId}`}
           >

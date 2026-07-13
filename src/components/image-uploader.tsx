@@ -124,7 +124,7 @@ export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
   };
 
   return (
-    <Card className="w-full max-w-xl mx-auto border border-border bg-card/45 backdrop-blur-md shadow-xl">
+    <Card className="w-full border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 backdrop-blur-md shadow-xl shadow-slate-100/50 dark:shadow-none rounded-2xl overflow-hidden">
       <CardContent className="p-6">
         {/* Dropzone or Preview Area */}
         {!previewUrl ? (
@@ -134,10 +134,10 @@ export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
             onDragLeave={handleDrag}
             onDrop={handleDrop}
             onClick={onButtonClick}
-            className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-10 cursor-pointer transition-all duration-300 ${
+            className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-8 sm:p-12 cursor-pointer transition-all duration-300 ${
               dragActive
-                ? "border-primary bg-primary/5 scale-[0.99]"
-                : "border-border/80 hover:border-primary/40 hover:bg-muted/10"
+                ? "border-slate-800 dark:border-slate-200 bg-slate-50 dark:bg-slate-800/30 scale-[0.99]"
+                : "border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50/50 dark:hover:bg-slate-800/10"
             }`}
           >
             <input
@@ -148,21 +148,24 @@ export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
               onChange={handleChange}
               accept=".jpg,.jpeg,.png,.webp"
             />
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 mb-4 transition-colors">
               <UploadCloud className="h-6 w-6" />
             </div>
-            <p className="text-sm font-semibold text-foreground">
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 text-center">
               Drag & drop your product image here, or{" "}
-              <span className="text-primary hover:underline">browse</span>
+              <span className="text-slate-950 dark:text-white underline font-bold">browse files</span>
             </p>
-            <p className="text-xs text-muted-foreground mt-2">
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-2 text-center">
               Supports JPEG, PNG, WEBP (Max 10MB)
             </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-[10px] text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-950/40 px-3 py-1.5 rounded-full border border-slate-100 dark:border-slate-900">
+              <span>✓ Optimized for Meesho dimensional weight specs</span>
+            </div>
           </div>
         ) : (
-          <div className="relative border border-border rounded-xl p-4 bg-muted/20 flex flex-col items-center">
+          <div className="relative border border-slate-100 dark:border-slate-800 rounded-xl p-4 bg-slate-50/55 dark:bg-slate-950/20 flex flex-col items-center">
             {/* Image Preview */}
-            <div className="relative w-full aspect-square max-h-72 rounded-lg overflow-hidden border border-border/60 bg-muted/40">
+            <div className="relative w-full aspect-square max-h-72 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-950">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={previewUrl}
@@ -173,7 +176,7 @@ export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
                 <Button
                   size="icon"
                   variant="destructive"
-                  className="absolute top-2 right-2 rounded-full h-8 w-8 shadow-md"
+                  className="absolute top-2 right-2 rounded-full h-8 w-8 shadow-md hover:scale-105 transition-transform"
                   onClick={clearFile}
                 >
                   <X className="h-4 w-4" />
@@ -182,11 +185,13 @@ export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
             </div>
 
             {/* Meta Info */}
-            <div className="w-full flex items-center space-x-3 mt-4 p-2 bg-background/50 border border-border/50 rounded-lg text-left">
-              <FileImage className="h-8 w-8 text-primary/80 shrink-0" />
+            <div className="w-full flex items-center space-x-3 mt-4 p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-lg text-left">
+              <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                <FileImage className="h-5 w-5 shrink-0" />
+              </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-foreground truncate">{file?.name}</p>
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-150 truncate">{file?.name}</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
                   {(file!.size / (1024 * 1024)).toFixed(2)} MB
                 </p>
               </div>
@@ -194,7 +199,7 @@ export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
 
             {/* Error Message */}
             {error && (
-              <div className="w-full mt-4 flex items-center space-x-2 text-xs text-destructive bg-destructive/5 border border-destructive/20 p-2.5 rounded-lg">
+              <div className="w-full mt-4 flex items-center space-x-2 text-xs text-destructive bg-red-500/5 border border-red-500/10 p-2.5 rounded-lg">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{error}</span>
               </div>
@@ -204,14 +209,14 @@ export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
             <div className="w-full flex gap-3 mt-5">
               <Button
                 variant="outline"
-                className="flex-1 border-border"
+                className="flex-1 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
                 onClick={clearFile}
                 disabled={uploading}
               >
                 Cancel
               </Button>
               <Button
-                className="flex-1 shadow-lg shadow-primary/10"
+                className="flex-1 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 text-white dark:text-slate-950 font-semibold shadow-md transition-all"
                 onClick={handleUpload}
                 disabled={uploading}
               >
@@ -221,7 +226,7 @@ export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
                     Uploading...
                   </>
                 ) : (
-                  "Upload Image"
+                  "Optimize Image"
                 )}
               </Button>
             </div>
