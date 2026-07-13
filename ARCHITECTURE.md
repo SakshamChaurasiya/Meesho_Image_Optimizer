@@ -10,7 +10,7 @@
 
 3. **No-Claim AI Processing Abstraction & Fallback**
    - The system is built around deterministic computer vision resizing, centering, padding, and brightness adjustments combined with background removal services.
-   - All AI service provider endpoints are designed through an abstraction layer to permit seamless swap-outs, supporting configured primary (`RemoveBgProvider`) and local fallback (`ImglyProvider` via `@imgly/background-removal-node`) providers.
+    - Background removal is executed locally using `ImglyProvider` (via `@imgly/background-removal-node`).
    - Buffer reuse is optimized so background removal runs only once per job, and the results are cached.
 
 4. **Robust Logging and Centralized Error Handling**

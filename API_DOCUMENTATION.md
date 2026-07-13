@@ -82,7 +82,7 @@ Or for errors:
     "success": true,
     "imageId": "64b123...",
     "status": "completed",
-    "backgroundProvider": "removebg",
+    "backgroundProvider": "imgly",
     "fallbackUsed": false,
     "variantCount": 24,
     "variants": [
@@ -131,7 +131,7 @@ Or for errors:
       "fileName": "tshirt.png",
       "originalUrl": "https://res.cloudinary.com/...",
       "status": "completed",
-      "backgroundProvider": "removebg",
+      "backgroundProvider": "imgly",
       "fallbackUsed": false,
       "analysis": {
         "dimensions": { "width": 800, "height": 800 },

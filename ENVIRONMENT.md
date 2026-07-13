@@ -12,7 +12,4 @@ Create a `.env` file in the root directory by copying `.env.example` and filling
 - `CLOUDINARY_CLOUD_NAME`: Cloudinary Cloud Name for storing images.
 - `CLOUDINARY_API_KEY`: Cloudinary API Key.
 - `CLOUDINARY_API_SECRET`: Cloudinary API Secret.
-- `REMOVE_BG_API_KEY`: API key for background removal.
-- `BACKGROUND_PROVIDER`: The primary background removal provider (e.g. `removebg`, `imgly`).
-- `BACKGROUND_FALLBACK`: The fallback background removal provider (e.g. `imgly`).
 - `REDIS_URL`: BullMQ job worker redis endpoint (e.g. Upstash Redis).
