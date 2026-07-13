@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger";
 
 const ProcessRequestSchema = z.object({
   imageId: z.string().min(1, "imageId is required"),
+  removeBackground: z.boolean().default(true),
 });
 
 /**
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { imageId } = parseResult.data;
+    const { imageId, removeBackground } = parseResult.data;
 
     // Fetch the ProductImage document
     const imageDoc = await ProductImage.findById(imageId);
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
     // Run the full variant generation pipeline
     let results;
     try {
-      results = await generateAllVariants(sourceBuffer, imageId);
+      results = await generateAllVariants(sourceBuffer, imageId, removeBackground);
     } catch (procErr) {
       logger.error({ imageId, procErr }, "Variant generation failed");
       imageDoc.status = "failed";

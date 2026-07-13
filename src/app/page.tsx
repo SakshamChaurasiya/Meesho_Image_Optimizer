@@ -6,6 +6,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ImageUploader } from "@/components/image-uploader";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
@@ -37,6 +39,7 @@ export default function Home() {
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [removeBgOptions, setRemoveBgOptions] = useState<Record<string, boolean>>({});
 
   const fetchImages = useCallback(async () => {
     try {
@@ -61,12 +64,13 @@ export default function Home() {
   };
 
   const handleProcess = async (imageId: string) => {
+    const shouldRemoveBg = removeBgOptions[imageId] ?? true;
     setProcessingIds((prev) => new Set(prev).add(imageId));
     try {
       const res = await fetch("/api/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageId }),
+        body: JSON.stringify({ imageId, removeBackground: shouldRemoveBg }),
       });
       const result = await res.json();
       if (res.ok && result.success) {
@@ -348,6 +352,38 @@ export default function Home() {
                             </span>
                           </div>
                         </div>
+
+                        {/* Option to toggle background removal */}
+                        {img.status === "pending" && !isProcessing && (
+                          <div className="flex items-center justify-between px-1 py-1.5 mt-1 border-t border-slate-100 dark:border-slate-800/60">
+                            <Label htmlFor={`remove-bg-${img._id}`} className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 cursor-pointer" onClick={() => {
+                              const currentVal = removeBgOptions[img._id] ?? true;
+                              setRemoveBgOptions((prev) => ({ ...prev, [img._id]: !currentVal }));
+                            }}>
+                              Remove background
+                            </Label>
+                            <button
+                              id={`remove-bg-${img._id}`}
+                              type="button"
+                              role="switch"
+                              aria-checked={removeBgOptions[img._id] ?? true}
+                              onClick={() => {
+                                const currentVal = removeBgOptions[img._id] ?? true;
+                                setRemoveBgOptions((prev) => ({ ...prev, [img._id]: !currentVal }));
+                              }}
+                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                (removeBgOptions[img._id] ?? true) ? 'bg-slate-900 dark:bg-slate-100' : 'bg-slate-200 dark:bg-slate-800'
+                              }`}
+                            >
+                              <span
+                                aria-hidden="true"
+                                className={`pointer-events-none inline-block h-4.5 w-4.5 transform rounded-full bg-white dark:bg-slate-900 shadow ring-0 transition duration-200 ease-in-out ${
+                                  (removeBgOptions[img._id] ?? true) ? 'translate-x-4' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        )}
 
                         {/* Action row */}
                         {img.status === "pending" && !isProcessing && (

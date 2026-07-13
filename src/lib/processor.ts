@@ -348,12 +348,13 @@ export async function processImageVariant(
 /**
  * Build deterministic 24-variant config matrix.
  */
-function buildVariantMatrix(): VariantConfig[] {
+function buildVariantMatrix(removeBackgroundOption: boolean = true): VariantConfig[] {
   const configs: VariantConfig[] = [];
   const paddings = [15, 20, 25, 30];
   const formats: OutputFormat[] = ["jpg"];
+  const bgRemovedOptions = removeBackgroundOption ? [true, false] : [false];
 
-  for (const bgRemoved of [true, false]) {
+  for (const bgRemoved of bgRemovedOptions) {
     for (const bgType of ["white", "light-gray", "transparent"] as BackgroundType[]) {
       if (bgType === "transparent" && !bgRemoved) continue;
 
@@ -385,7 +386,8 @@ function buildVariantMatrix(): VariantConfig[] {
  */
 export async function generateAllVariants(
   sourceBuffer: Buffer,
-  imageId: string
+  imageId: string,
+  removeBackgroundOption: boolean = true
 ): Promise<{
   variants: IVariant[];
   analysis: ImageAnalysis;
@@ -397,20 +399,22 @@ export async function generateAllVariants(
   let backgroundProvider: string | undefined;
   let fallbackUsed: boolean | undefined;
 
-  try {
-    const provider = getBackgroundRemovalProvider();
-    const res = await provider.remove(sourceBuffer);
-    bgRemovedBuffer = res.buffer;
-    backgroundProvider = res.backgroundProvider;
-    fallbackUsed = res.fallbackUsed;
-  } catch (err) {
-    logger.error({ err }, "Initial background removal for analysis failed. Using source image.");
+  if (removeBackgroundOption) {
+    try {
+      const provider = getBackgroundRemovalProvider();
+      const res = await provider.remove(sourceBuffer);
+      bgRemovedBuffer = res.buffer;
+      backgroundProvider = res.backgroundProvider;
+      fallbackUsed = res.fallbackUsed;
+    } catch (err) {
+      logger.error({ err }, "Initial background removal for analysis failed. Using source image.");
+    }
   }
 
   const analysisBuffer = bgRemovedBuffer || sourceBuffer;
   const analysis = await analyzeImage(analysisBuffer);
 
-  const matrix = buildVariantMatrix();
+  const matrix = buildVariantMatrix(removeBackgroundOption);
   logger.info({ imageId, total: matrix.length }, "Starting variant generation");
 
   const variants: IVariant[] = [];
