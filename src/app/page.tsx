@@ -307,10 +307,10 @@ export default function Home() {
                       img.status === "completed"
                         ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
                         : img.status === "failed"
-                        ? "bg-red-500/10 text-red-650 dark:text-red-400 border-red-500/20"
-                        : img.status === "processing"
-                        ? "bg-blue-500/10 text-blue-650 dark:text-blue-400 border-blue-500/20"
-                        : "bg-amber-500/10 text-amber-650 dark:text-amber-400 border-amber-500/20";
+                          ? "bg-red-500/10 text-red-650 dark:text-red-400 border-red-500/20"
+                          : img.status === "processing"
+                            ? "bg-blue-500/10 text-blue-650 dark:text-blue-400 border-blue-500/20"
+                            : "bg-amber-500/10 text-amber-650 dark:text-amber-400 border-amber-500/20";
 
                     return (
                       <motion.div
@@ -382,11 +382,10 @@ export default function Home() {
 
                         {/* Delete button */}
                         <button
-                          className={`w-full flex items-center justify-center gap-1 text-[9px] font-bold mt-0.5 py-1.5 rounded-lg border transition-all duration-150 ${
-                            confirmDeleteId === img._id
-                              ? "border-red-200 bg-red-50 dark:bg-red-950/20 text-red-650 hover:bg-red-100 dark:hover:bg-red-950/40"
-                              : "border-slate-100 dark:border-slate-800/80 text-slate-400 dark:text-slate-500 hover:border-red-100 hover:text-red-500"
-                          } ${deletingIds.has(img._id) ? "opacity-50 pointer-events-none" : ""}`}
+                          className={`w-full flex items-center justify-center gap-1 text-[9px] font-bold mt-0.5 py-1.5 rounded-lg border transition-all duration-150 ${confirmDeleteId === img._id
+                            ? "border-red-200 bg-red-50 dark:bg-red-950/20 text-red-650 hover:bg-red-100 dark:hover:bg-red-950/40"
+                            : "border-slate-100 dark:border-slate-800/80 text-slate-400 dark:text-slate-500 hover:border-red-100 hover:text-red-500"
+                            } ${deletingIds.has(img._id) ? "opacity-50 pointer-events-none" : ""}`}
                           onClick={() => handleDelete(img._id)}
                           id={`delete-btn-${img._id}`}
                           disabled={deletingIds.has(img._id)}
@@ -394,7 +393,7 @@ export default function Home() {
                           {deletingIds.has(img._id) ? (
                             <><Loader2 className="h-3 w-3 animate-spin" /> Deleting…</>
                           ) : confirmDeleteId === img._id ? (
-                            <><Trash2 className="h-3 w-3" /> Confirm Delete</>  
+                            <><Trash2 className="h-3 w-3" /> Confirm Delete</>
                           ) : (
                             <><Trash2 className="h-3 w-3" /> Remove Image</>
                           )}

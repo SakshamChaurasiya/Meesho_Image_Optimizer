@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { UploadCloud, FileImage, X, AlertCircle, RefreshCw } from "lucide-react";
+import { UploadCloud, X, AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -10,13 +10,19 @@ interface ImageUploaderProps {
   onUploadSuccess?: (data: any) => void; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
+interface UploadQueueItem {
+  id: string;
+  file: File;
+  previewUrl: string;
+  status: "idle" | "uploading" | "success" | "error";
+  error?: string;
+}
+
 export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
   const [dragActive, setDragActive] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [queue, setQueue] = useState<UploadQueueItem[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Handle drag events
@@ -30,27 +36,37 @@ export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
     }
   };
 
-  // Validate and set file
-  const validateAndSetFile = (selectedFile: File) => {
-    setError(null);
-
-    // Validate size (10MB)
-    if (selectedFile.size > 10 * 1024 * 1024) {
-      setError("File size exceeds 10MB limit.");
-      toast.error("File size exceeds 10MB limit.");
-      return;
-    }
-
-    // Validate type
+  // Validate and add multiple files
+  const validateAndAddFiles = (selectedFiles: FileList) => {
+    const newItems: UploadQueueItem[] = [];
     const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-    if (!validTypes.includes(selectedFile.type)) {
-      setError("Invalid format. Please upload JPEG, PNG or WEBP.");
-      toast.error("Only JPEG, PNG, and WEBP formats are supported.");
-      return;
-    }
 
-    setFile(selectedFile);
-    setPreviewUrl(URL.createObjectURL(selectedFile));
+    Array.from(selectedFiles).forEach((selectedFile) => {
+      // Validate size (10MB)
+      if (selectedFile.size > 10 * 1024 * 1024) {
+        toast.error(`"${selectedFile.name}" exceeds 10MB limit.`);
+        return;
+      }
+
+      // Validate type
+      if (!validTypes.includes(selectedFile.type)) {
+        toast.error(`Only JPEG, PNG, and WEBP formats are supported. "${selectedFile.name}" ignored.`);
+        return;
+      }
+
+      // Add to queue
+      newItems.push({
+        id: Math.random().toString(36).substring(7),
+        file: selectedFile,
+        previewUrl: URL.createObjectURL(selectedFile),
+        status: "idle",
+      });
+    });
+
+    if (newItems.length > 0) {
+      setQueue((prev) => [...prev, ...newItems]);
+      toast.success(`Added ${newItems.length} images to queue.`);
+    }
   };
 
   // Handle drop event
@@ -59,16 +75,16 @@ export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
     e.stopPropagation();
     setDragActive(false);
 
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      validateAndSetFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      validateAndAddFiles(e.dataTransfer.files);
     }
   };
 
   // Handle file input change
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
-    if (e.target.files && e.target.files[0]) {
-      validateAndSetFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      validateAndAddFiles(e.target.files);
     }
   };
 
@@ -77,57 +93,86 @@ export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
     inputRef.current?.click();
   };
 
-  // Clear selected file
-  const clearFile = () => {
-    setFile(null);
-    setPreviewUrl(null);
-    setError(null);
+  // Remove individual item
+  const removeItem = (id: string) => {
+    setQueue((prev) => {
+      const item = prev.find((x) => x.id === id);
+      if (item) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+      return prev.filter((x) => x.id !== id);
+    });
+  };
+
+  // Clear queue
+  const clearQueue = () => {
+    queue.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    setQueue([]);
     if (inputRef.current) {
       inputRef.current.value = "";
     }
   };
 
-  // Handle Upload submit
+  // Handle Sequential Upload submit
   const handleUpload = async () => {
-    if (!file) return;
+    const pendingItems = queue.filter((x) => x.status === "idle" || x.status === "error");
+    if (pendingItems.length === 0) return;
 
     setUploading(true);
-    setError(null);
 
-    const formData = new FormData();
-    formData.append("file", file);
+    for (const item of pendingItems) {
+      // Mark current item as uploading
+      setQueue((prev) =>
+        prev.map((x) => (x.id === item.id ? { ...x, status: "uploading" } : x))
+      );
 
-    try {
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
+      const formData = new FormData();
+      formData.append("file", item.file);
 
-      const result = await response.json();
+      try {
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || "Failed to upload image.");
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || "Failed to upload image.");
+        }
+
+        // Mark success
+        setQueue((prev) =>
+          prev.map((x) => (x.id === item.id ? { ...x, status: "success" } : x))
+        );
+
+        toast.success(`"${item.file.name}" uploaded successfully!`);
+        if (onUploadSuccess) {
+          onUploadSuccess(result.data);
+        }
+
+        // Remove from list after short success delay
+        setTimeout(() => {
+          removeItem(item.id);
+        }, 1500);
+
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "An unexpected error occurred.";
+        setQueue((prev) =>
+          prev.map((x) => (x.id === item.id ? { ...x, status: "error", error: errMsg } : x))
+        );
+        toast.error(`Failed to optimize "${item.file.name}": ${errMsg}`);
       }
-
-      toast.success("Product image uploaded successfully!");
-      if (onUploadSuccess) {
-        onUploadSuccess(result.data);
-      }
-      clearFile();
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : "An unexpected error occurred.";
-      setError(errMsg);
-      toast.error(errMsg);
-    } finally {
-      setUploading(false);
     }
+
+    setUploading(false);
   };
 
   return (
     <Card className="w-full border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 backdrop-blur-md shadow-xl shadow-slate-100/50 dark:shadow-none rounded-2xl overflow-hidden">
       <CardContent className="p-6">
-        {/* Dropzone or Preview Area */}
-        {!previewUrl ? (
+        {/* Dropzone Area */}
+        {queue.length === 0 ? (
           <div
             onDragEnter={handleDrag}
             onDragOver={handleDrag}
@@ -137,96 +182,128 @@ export function ImageUploader({ onUploadSuccess }: ImageUploaderProps) {
             className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-8 sm:p-12 cursor-pointer transition-all duration-300 ${
               dragActive
                 ? "border-slate-800 dark:border-slate-200 bg-slate-50 dark:bg-slate-800/30 scale-[0.99]"
-                : "border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50/50 dark:hover:bg-slate-800/10"
+                : "border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-650 hover:bg-slate-50/50 dark:hover:bg-slate-800/10"
             }`}
           >
             <input
               ref={inputRef}
               type="file"
               className="hidden"
-              multiple={false}
+              multiple={true}
               onChange={handleChange}
               accept=".jpg,.jpeg,.png,.webp"
             />
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 mb-4 transition-colors">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-650 dark:text-slate-300 mb-4 transition-colors">
               <UploadCloud className="h-6 w-6" />
             </div>
             <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 text-center">
-              Drag & drop your product image here, or{" "}
+              Drag & drop product images here, or{" "}
               <span className="text-slate-950 dark:text-white underline font-bold">browse files</span>
             </p>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-2 text-center">
-              Supports JPEG, PNG, WEBP (Max 10MB)
+              Supports JPEG, PNG, WEBP (Max 10MB per file)
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-[10px] text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-950/40 px-3 py-1.5 rounded-full border border-slate-100 dark:border-slate-900">
-              <span>✓ Optimized for Meesho dimensional weight specs</span>
+              <span>✓ Batch processing enabled</span>
             </div>
           </div>
         ) : (
-          <div className="relative border border-slate-100 dark:border-slate-800 rounded-xl p-4 bg-slate-50/55 dark:bg-slate-950/20 flex flex-col items-center">
-            {/* Image Preview */}
-            <div className="relative w-full aspect-square max-h-72 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-950">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={previewUrl}
-                alt="Upload preview"
-                className="w-full h-full object-contain"
-              />
+          <div className="relative border border-slate-100 dark:border-slate-850 rounded-xl p-4 bg-slate-50/55 dark:bg-slate-950/20 flex flex-col gap-4">
+            {/* List of files in queue */}
+            <div className="w-full flex items-center justify-between border-b border-slate-200/50 dark:border-slate-800 pb-2">
+              <span className="text-xs font-bold text-slate-850 dark:text-slate-300">
+                Upload Queue ({queue.length} file{queue.length > 1 ? "s" : ""})
+              </span>
               {!uploading && (
-                <Button
-                  size="icon"
-                  variant="destructive"
-                  className="absolute top-2 right-2 rounded-full h-8 w-8 shadow-md hover:scale-105 transition-transform"
-                  onClick={clearFile}
+                <button
+                  onClick={clearQueue}
+                  className="text-[10px] text-red-500 hover:underline font-bold"
                 >
-                  <X className="h-4 w-4" />
-                </Button>
+                  Clear All
+                </button>
               )}
             </div>
 
-            {/* Meta Info */}
-            <div className="w-full flex items-center space-x-3 mt-4 p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-lg text-left">
-              <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                <FileImage className="h-5 w-5 shrink-0" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-150 truncate">{file?.name}</p>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                  {(file!.size / (1024 * 1024)).toFixed(2)} MB
-                </p>
-              </div>
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1 scrollbar-thin">
+              {queue.map((item) => (
+                <div
+                  key={item.id}
+                  className="relative flex items-center space-x-3 p-2.5 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-lg text-left"
+                >
+                  {/* Preview Thumbnail */}
+                  <div className="relative h-10 w-10 rounded-md overflow-hidden bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-855 shrink-0">
+                    <img
+                      src={item.previewUrl}
+                      alt={item.file.name}
+                      className="w-full h-full object-contain"
+                    />
+                    {item.status === "uploading" && (
+                      <div className="absolute inset-0 bg-white/70 dark:bg-slate-900/70 flex items-center justify-center">
+                        <RefreshCw className="h-4 w-4 text-slate-800 dark:text-slate-200 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Meta Details */}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-150 truncate">
+                      {item.file.name}
+                    </p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                      {(item.file.size / (1024 * 1024)).toFixed(2)} MB
+                    </p>
+                  </div>
+
+                  {/* Actions & Status */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {item.status === "success" && (
+                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded font-bold">
+                        Ready
+                      </span>
+                    )}
+                    {item.status === "error" && (
+                      <div className="flex items-center gap-1 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded text-red-550 dark:text-red-400 text-[9px] font-bold" title={item.error}>
+                        <AlertCircle className="h-3 w-3" />
+                        Failed
+                      </div>
+                    )}
+                    {!uploading && item.status !== "success" && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 rounded-full text-slate-400 hover:text-red-500"
+                        onClick={() => removeItem(item.id)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
 
-            {/* Error Message */}
-            {error && (
-              <div className="w-full mt-4 flex items-center space-x-2 text-xs text-destructive bg-red-500/5 border border-red-500/10 p-2.5 rounded-lg">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {/* Upload CTA Button */}
-            <div className="w-full flex gap-3 mt-5">
+            {/* Action buttons */}
+            <div className="w-full flex gap-3 mt-1">
               <Button
                 variant="outline"
                 className="flex-1 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
-                onClick={clearFile}
+                onClick={clearQueue}
                 disabled={uploading}
               >
-                Cancel
+                Add More
               </Button>
               <Button
                 className="flex-1 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 text-white dark:text-slate-950 font-semibold shadow-md transition-all"
                 onClick={handleUpload}
-                disabled={uploading}
+                disabled={uploading || queue.every((x) => x.status === "success")}
               >
                 {uploading ? (
                   <>
                     <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Uploading...
+                    Processing...
                   </>
                 ) : (
-                  "Optimize Image"
+                  "Optimize Batch"
                 )}
               </Button>
             </div>
