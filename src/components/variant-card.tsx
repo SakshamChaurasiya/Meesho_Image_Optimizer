@@ -50,7 +50,7 @@ async function downloadVariant(url: string, fileName: string) {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(blobUrl);
-  } catch (error) {
+  } catch {
     const a = document.createElement("a");
     a.href = downloadUrl;
     a.download = fileName;
