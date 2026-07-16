@@ -6,7 +6,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ImageUploader } from "@/components/image-uploader";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { motion, AnimatePresence } from "framer-motion";
 import {

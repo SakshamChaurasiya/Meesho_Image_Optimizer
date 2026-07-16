@@ -350,8 +350,8 @@ export async function processImageVariant(
  */
 function buildVariantMatrix(removeBackgroundOption: boolean = true): VariantConfig[] {
   const configs: VariantConfig[] = [];
-  const paddings = [15, 20, 25, 30];
-  const formats: OutputFormat[] = ["jpg"];
+  const paddings = removeBackgroundOption ? [15, 20, 25, 30] : [10, 15, 20, 25, 30, 35];
+  const formats: OutputFormat[] = removeBackgroundOption ? ["jpg"] : ["jpg"];
   const bgRemovedOptions = removeBackgroundOption ? [true, false] : [false];
 
   for (const bgRemoved of bgRemovedOptions) {
